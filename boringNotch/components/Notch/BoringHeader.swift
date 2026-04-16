@@ -13,6 +13,7 @@ struct BoringHeader: View {
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @StateObject var tvm = ShelfStateViewModel.shared
+    @Default(.tamagotchiEnabled) var tamagotchiEnabled
     var body: some View {
         HStack(spacing: 0) {
             HStack {
@@ -47,6 +48,25 @@ struct BoringHeader: View {
                         )
                             .transition(.scale(scale: 0.8).combined(with: .opacity))
                     } else {
+                        if tamagotchiEnabled {
+                            Button(action: {
+                                withAnimation(.smooth) {
+                                    coordinator.currentView = .tamagotchi
+                                }
+                            }) {
+                                Capsule()
+                                    .fill(.black)
+                                    .frame(width: 30, height: 30)
+                                    .overlay {
+                                        Image(systemName: "pawprint.fill")
+                                            .foregroundColor(.white)
+                                            .padding()
+                                            .imageScale(.medium)
+                                    }
+                            }
+                            .help(NSLocalizedString("tamagotchi_open_drawer", comment: "Open Tamagotchi drawer button tooltip"))
+                            .buttonStyle(PlainButtonStyle())
+                        }
                         if Defaults[.showMirror] {
                             Button(action: {
                                 vm.toggleCameraPreview()

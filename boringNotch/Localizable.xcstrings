@@ -10255,6 +10255,184 @@
         }
       }
     },
+    "tamagotchi_enable_toggle" : {
+      "comment" : "Settings toggle for enabling tamagotchi",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enable Companion"
+          }
+        }
+      }
+    },
+    "tamagotchi_energy" : {
+      "comment" : "Tamagotchi energy metric label",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Energy"
+          }
+        }
+      }
+    },
+    "tamagotchi_feed" : {
+      "comment" : "Tamagotchi feed action",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Feed"
+          }
+        }
+      }
+    },
+    "tamagotchi_happiness" : {
+      "comment" : "Tamagotchi happiness metric label",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Happiness"
+          }
+        }
+      }
+    },
+    "tamagotchi_hunger" : {
+      "comment" : "Tamagotchi hunger metric label",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hunger"
+          }
+        }
+      }
+    },
+    "tamagotchi_mood_doing_okay" : {
+      "comment" : "Medium mood text in tamagotchi panel",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doing okay"
+          }
+        }
+      }
+    },
+    "tamagotchi_mood_happy" : {
+      "comment" : "High mood text in tamagotchi panel",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Happy"
+          }
+        }
+      }
+    },
+    "tamagotchi_mood_high" : {
+      "comment" : "High mood badge label",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "High"
+          }
+        }
+      }
+    },
+    "tamagotchi_mood_low" : {
+      "comment" : "Low mood badge label",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Low"
+          }
+        }
+      }
+    },
+    "tamagotchi_mood_medium" : {
+      "comment" : "Medium mood badge label",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Medium"
+          }
+        }
+      }
+    },
+    "tamagotchi_mood_needs_care" : {
+      "comment" : "Low mood text in tamagotchi panel",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Needs care"
+          }
+        }
+      }
+    },
+    "tamagotchi_open_drawer" : {
+      "comment" : "Open Tamagotchi drawer button tooltip",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Companion"
+          }
+        }
+      }
+    },
+    "tamagotchi_play" : {
+      "comment" : "Tamagotchi play action",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Play"
+          }
+        }
+      }
+    },
+    "tamagotchi_rest" : {
+      "comment" : "Tamagotchi rest action",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rest"
+          }
+        }
+      }
+    },
+    "tamagotchi_title" : {
+      "comment" : "Tamagotchi panel title",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Companion"
+          }
+        }
+      }
+    },
     "Time to Full Charge: %lld min" : {
       "localizations" : {
         "cs" : {

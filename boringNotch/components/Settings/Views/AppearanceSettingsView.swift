@@ -48,6 +48,9 @@ struct Appearance: View {
                 Defaults.Toggle(key: .showNotHumanFace) {
                     Text("Show cool face animation while inactive")
                 }
+                Defaults.Toggle(key: .tamagotchiEnabled) {
+                    Text(NSLocalizedString("tamagotchi_enable_toggle", comment: "Settings toggle for enabling tamagotchi"))
+                }
             } header: {
                 HStack {
                     Text("Additional features")

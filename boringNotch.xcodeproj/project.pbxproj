@@ -115,6 +115,10 @@
 		14D570BC2C5E98EB0011E668 /* generic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D570BB2C5E98EB0011E668 /* generic.swift */; };
 		14D570C02C5EA5870011E668 /* AnimatedFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D570BF2C5EA5870011E668 /* AnimatedFace.swift */; };
 		14D570C62C5F38210011E668 /* BoringHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D570C52C5F38210011E668 /* BoringHeader.swift */; };
+		C0A100012F70000100AA0001 /* TamagotchiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A100052F70000100AA0001 /* TamagotchiView.swift */; };
+		C0A100022F70000100AA0001 /* TamagotchiDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A100062F70000100AA0001 /* TamagotchiDrawerView.swift */; };
+		C0A100032F70000100AA0001 /* TamagotchiManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A100072F70000100AA0001 /* TamagotchiManager.swift */; };
+		C0A100042F70000100AA0001 /* TamagotchiState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A100082F70000100AA0001 /* TamagotchiState.swift */; };
 		14D570C92C5F38890011E668 /* BoringViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D570C82C5F38890011E668 /* BoringViewModel.swift */; };
 		14D570CB2C5F4B2C0011E668 /* BatteryStatusViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D570CA2C5F4B2C0011E668 /* BatteryStatusViewModel.swift */; };
 		14D570CD2C5F4BB70011E668 /* BoringBattery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D570CC2C5F4BB70011E668 /* BoringBattery.swift */; };
@@ -299,6 +303,10 @@
 		14D570BB2C5E98EB0011E668 /* generic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = generic.swift; sourceTree = "<group>"; };
 		14D570BF2C5EA5870011E668 /* AnimatedFace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimatedFace.swift; sourceTree = "<group>"; };
 		14D570C52C5F38210011E668 /* BoringHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoringHeader.swift; sourceTree = "<group>"; };
+		C0A100052F70000100AA0001 /* TamagotchiView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TamagotchiView.swift; sourceTree = "<group>"; };
+		C0A100062F70000100AA0001 /* TamagotchiDrawerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TamagotchiDrawerView.swift; sourceTree = "<group>"; };
+		C0A100072F70000100AA0001 /* TamagotchiManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TamagotchiManager.swift; sourceTree = "<group>"; };
+		C0A100082F70000100AA0001 /* TamagotchiState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TamagotchiState.swift; sourceTree = "<group>"; };
 		14D570C82C5F38890011E668 /* BoringViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoringViewModel.swift; sourceTree = "<group>"; };
 		14D570CA2C5F4B2C0011E668 /* BatteryStatusViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryStatusViewModel.swift; sourceTree = "<group>"; };
 		14D570CC2C5F4BB70011E668 /* BoringBattery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoringBattery.swift; sourceTree = "<group>"; };
@@ -592,6 +600,7 @@
 				B18654302C6F4590000B926A /* Settings */,
 				B186542F2C6F455E000B926A /* Notch */,
 				9A0887332C7AFF7E00C160EA /* Tabs */,
+				C0A100092F70000100AA0001 /* Tamagotchi */,
 				B186542E2C6F453B000B926A /* Music */,
 				14D570BF2C5EA5870011E668 /* AnimatedFace.swift */,
 				14288DE72C6E01C800B9F80C /* ProgressIndicator.swift */,
@@ -611,8 +620,18 @@
 				147163992C5D35FF0068B555 /* MusicManager.swift */,
 				149E0B962C737D00006418B1 /* WebcamManager.swift */,
 				14C08BB52C8DE42D000F8AA0 /* CalendarManager.swift */,
+				C0A100072F70000100AA0001 /* TamagotchiManager.swift */,
 			);
 			path = managers;
+			sourceTree = "<group>";
+		};
+		C0A100092F70000100AA0001 /* Tamagotchi */ = {
+			isa = PBXGroup;
+			children = (
+				C0A100062F70000100AA0001 /* TamagotchiDrawerView.swift */,
+				C0A100052F70000100AA0001 /* TamagotchiView.swift */,
+			);
+			path = Tamagotchi;
 			sourceTree = "<group>";
 		};
 		149E0B982C737D26006418B1 /* Webcam */ = {
@@ -724,6 +743,7 @@
 				1163988E2DF5CC870052E6AF /* CalendarModel.swift */,
 				1163988C2DF5CAB40052E6AF /* EventModel.swift */,
 				B19016232CC15B4D00E3F12E /* Constants.swift */,
+				C0A100082F70000100AA0001 /* TamagotchiState.swift */,
 				14D570C82C5F38890011E668 /* BoringViewModel.swift */,
 				14D570CA2C5F4B2C0011E668 /* BatteryStatusViewModel.swift */,
 				1153BD902D986DB300979FB0 /* PlaybackState.swift */,
@@ -1024,6 +1044,7 @@
 				1113ABC52E80E27000EC13B2 /* ShelfItemView.swift in Sources */,
 				1113ABC62E80E27000EC13B2 /* ShelfPersistenceService.swift in Sources */,
 				11DB26662EDD0BE1001EA0CF /* LyricsService.swift in Sources */,
+				C0A100042F70000100AA0001 /* TamagotchiState.swift in Sources */,
 				1113ABC82E80E27000EC13B2 /* ShelfItem.swift in Sources */,
 				1113ABCA2E80E27000EC13B2 /* ShelfSelectionModel.swift in Sources */,
 				1113ABCB2E80E27000EC13B2 /* QuickLookService.swift in Sources */,
@@ -1033,6 +1054,7 @@
 				1160F8D82DD98230006FBB94 /* NotchShape.swift in Sources */,
 				5917FD112E57891600E87F1C /* MediaKeyInterceptor.swift in Sources */,
 				14C08BC12C8E03AD000F8AA0 /* NSImage+Extensions.swift in Sources */,
+				C0A100012F70000100AA0001 /* TamagotchiView.swift in Sources */,
 				149E0B9A2C737D40006418B1 /* WebcamView.swift in Sources */,
 				1471639A2C5D35FF0068B555 /* MusicManager.swift in Sources */,
 				B1B112932C6A577E00093D8F /* MouseTracker.swift in Sources */,
@@ -1049,6 +1071,7 @@
 				B1B112912C6A572100093D8F /* EditPanelView.swift in Sources */,
 				1153BD912D986DB300979FB0 /* PlaybackState.swift in Sources */,
 				B1A78C822C8BA08100BD51B0 /* FullscreenMediaDetection.swift in Sources */,
+				C0A100032F70000100AA0001 /* TamagotchiManager.swift in Sources */,
 				14E9FEAE2C7325770062E83F /* Button+Bouncing.swift in Sources */,
 				14D570C92C5F38890011E668 /* BoringViewModel.swift in Sources */,
 				14D570BC2C5E98EB0011E668 /* generic.swift in Sources */,
@@ -1080,6 +1103,7 @@
 				1471A8592C6281BD0058408D /* BoringNotchWindow.swift in Sources */,
 				14CEF4182C5CAED300855D72 /* ContentView.swift in Sources */,
 				9A987A0D2C73CA66005CA465 /* ShelfView.swift in Sources */,
+				C0A100022F70000100AA0001 /* TamagotchiDrawerView.swift in Sources */,
 				1132E5142E777B920068732D /* YouTubeMusicNetworking.swift in Sources */,
 				1132E5122E777B6E0068732D /* YouTubeMusicModels.swift in Sources */,
 				11CFC65F2E097F2F00748C80 /* OnboardingView.swift in Sources */,
