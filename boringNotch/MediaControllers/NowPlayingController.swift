@@ -240,7 +240,7 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         if let elapsedTime = payload.elapsedTime {
             newPlaybackState.currentTime = elapsedTime
         } else if diff {
-            if payload.playing == false {
+            if payload.playing == true {
                 let timeSinceLastUpdate = Date().timeIntervalSince(self.playbackState.lastUpdated)
                 newPlaybackState.currentTime = self.playbackState.currentTime + (self.playbackState.playbackRate * timeSinceLastUpdate)
             } else {
@@ -272,6 +272,8 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
             )
         } else if !diff {
             newPlaybackState.artwork = nil
+        } else {
+            newPlaybackState.artwork = self.playbackState.artwork
         }
 
         if let dateString = payload.timestamp,

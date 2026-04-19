@@ -19,7 +19,11 @@ class MusicManager: ObservableObject {
     static let shared = MusicManager()
     private var cancellables = Set<AnyCancellable>()
     private var controllerCancellables = Set<AnyCancellable>()
+    /// Extra controller instances subscribed only for multi-source playback discovery (not for preference-based `activeController`).
+    private var discoveryControllers: [any MediaControllerProtocol] = []
+    private var discoveryCancellables = Set<AnyCancellable>()
     private var debounceIdleTask: Task<Void, Never>?
+    private var sourceCommandControllers: [String: any MediaControllerProtocol] = [:]
 
     // Helper to check if macOS has removed support for NowPlayingController
     public private(set) var isNowPlayingDeprecated: Bool = false
@@ -58,6 +62,14 @@ class MusicManager: ObservableObject {
     @Published var isFavoriteTrack: Bool = false
 
     private var artworkData: Data? = nil
+    @Published private(set) var mediaSources: [MediaSourceItem] = []
+    @Published private(set) var selectedSourceID: String?
+    private var lastManualSourceSelectionDate: Date?
+    private let manualSelectionHoldDuration: TimeInterval = 20
+    /// Paused sources with no updates beyond this age are dropped from the carousel.
+    private let stalePausedSourceTimeout: TimeInterval = 180
+    /// "Playing" sources that stop receiving heartbeats can otherwise linger forever; drop after this age.
+    private let stalePlayingSourceTimeout: TimeInterval = 300
 
     // Store last values at the time artwork was changed
     private var lastArtworkTitle: String = "I'm Handsome"
@@ -103,6 +115,7 @@ class MusicManager: ObservableObject {
         debounceIdleTask?.cancel()
         cancellables.removeAll()
         controllerCancellables.removeAll()
+        teardownDiscoveryFeeds()
         flipWorkItem?.cancel()
         transitionWorkItem?.cancel()
 
@@ -112,28 +125,16 @@ class MusicManager: ObservableObject {
 
     // MARK: - Setup Methods
     private func createController(for type: MediaControllerType) -> (any MediaControllerProtocol)? {
+        teardownDiscoveryFeeds()
         // Cleanup previous controller
         if activeController != nil {
             controllerCancellables.removeAll()
             activeController = nil
         }
 
-        let newController: (any MediaControllerProtocol)?
-
-        switch type {
-        case .nowPlaying:
-            // Only create NowPlayingController if not deprecated on this macOS version
-            if !self.isNowPlayingDeprecated {
-                newController = NowPlayingController()
-            } else {
-                return nil
-            }
-        case .appleMusic:
-            newController = AppleMusicController()
-        case .spotify:
-            newController = SpotifyController()
-        case .youtubeMusic:
-            newController = YouTubeMusicController()
+        let newController = makeController(for: type)
+        if newController == nil {
+            return nil
         }
 
         // Set up state observation for the new controller
@@ -149,6 +150,23 @@ class MusicManager: ObservableObject {
         }
 
         return newController
+    }
+
+    private func makeController(for type: MediaControllerType) -> (any MediaControllerProtocol)? {
+        switch type {
+        case .nowPlaying:
+            // Only create NowPlayingController if not deprecated on this macOS version
+            if !self.isNowPlayingDeprecated {
+                return NowPlayingController()
+            }
+            return nil
+        case .appleMusic:
+            return AppleMusicController()
+        case .spotify:
+            return SpotifyController()
+        case .youtubeMusic:
+            return YouTubeMusicController()
+        }
     }
 
     private func setActiveControllerBasedOnPreference() {
@@ -174,16 +192,53 @@ class MusicManager: ObservableObject {
 
         // Set new active controller
         activeController = controller
+        resetSourceCarouselState()
+        sourceCommandControllers.removeAll()
         
         self.canFavoriteTrack = controller.supportsFavorite
 
-        // Get current state from active controller
+        setupDiscoveryFeeds()
+
+        // Get current state from active + discovery feeds
         forceUpdate()
+    }
+
+    /// Subscribes to every controller type except the active preference controller so multiple apps can populate `mediaSources` concurrently.
+    private func setupDiscoveryFeeds() {
+        teardownDiscoveryFeeds()
+        guard let active = activeController else { return }
+
+        for feedType in MediaControllerType.allCases {
+            guard !controller(active, matches: feedType) else { continue }
+            guard let feedController = makeController(for: feedType) else { continue }
+
+            discoveryControllers.append(feedController)
+            feedController.playbackStatePublisher
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] state in
+                    self?.updateFromPlaybackState(state)
+                }
+                .store(in: &discoveryCancellables)
+        }
+    }
+
+    private func teardownDiscoveryFeeds() {
+        discoveryCancellables.removeAll()
+        discoveryControllers.removeAll()
     }
 
     // MARK: - Update Methods
     @MainActor
     private func updateFromPlaybackState(_ state: PlaybackState) {
+        upsertMediaSource(with: state)
+        pruneStaleSources(referenceDate: state.lastUpdated)
+        let displayState = resolvedDisplayState(fallback: state)
+        guard !isPlaceholderPlaybackState(displayState) else { return }
+        applyDisplayState(displayState)
+    }
+
+    @MainActor
+    private func applyDisplayState(_ state: PlaybackState) {
         // Check for playback state changes (playing/paused)
         if state.isPlaying != self.isPlaying {
             NSLog("Playback state changed: \(state.isPlaying ? "Playing" : "Paused")")
@@ -276,8 +331,7 @@ class MusicManager: ObservableObject {
 
         if state.bundleIdentifier != self.bundleIdentifier {
             self.bundleIdentifier = state.bundleIdentifier
-            // Update volume control support from active controller
-            self.volumeControlSupported = activeController?.supportsVolumeControl ?? false
+            updateControlCapabilities(for: state.bundleIdentifier)
         }
 
         if repeatModeChanged {
@@ -292,6 +346,188 @@ class MusicManager: ObservableObject {
         }
         
         self.timestampDate = state.lastUpdated
+    }
+
+    var selectedSourceIndex: Int {
+        guard let selectedSourceID else { return 0 }
+        return mediaSources.firstIndex(where: { $0.id == selectedSourceID }) ?? 0
+    }
+
+    var selectedSource: MediaSourceItem? {
+        guard let selectedSourceID else { return mediaSources.first }
+        return mediaSources.first(where: { $0.id == selectedSourceID })
+    }
+
+    var shouldShowMediaSourceCarousel: Bool {
+        mediaSources.count > 1
+    }
+
+    @MainActor
+    func selectMediaSource(at index: Int, userInitiated: Bool = true) {
+        guard mediaSources.indices.contains(index) else { return }
+        selectedSourceID = mediaSources[index].id
+        if userInitiated {
+            lastManualSourceSelectionDate = Date()
+        }
+        applyDisplayState(mediaSources[index].state)
+    }
+
+    @MainActor
+    func selectNextMediaSource() {
+        guard !mediaSources.isEmpty else { return }
+        let nextIndex = (selectedSourceIndex + 1) % mediaSources.count
+        selectMediaSource(at: nextIndex)
+    }
+
+    @MainActor
+    func selectPreviousMediaSource() {
+        guard !mediaSources.isEmpty else { return }
+        let previousIndex = selectedSourceIndex == 0 ? mediaSources.count - 1 : selectedSourceIndex - 1
+        selectMediaSource(at: previousIndex)
+    }
+
+    @MainActor
+    private func resetSourceCarouselState() {
+        mediaSources.removeAll()
+        selectedSourceID = nil
+        lastManualSourceSelectionDate = nil
+    }
+
+    @MainActor
+    private func upsertMediaSource(with state: PlaybackState) {
+        let sourceID = normalizedSourceIdentifier(from: state.bundleIdentifier)
+        if shouldIgnoreIncomingState(state, normalizedSourceID: sourceID) {
+            return
+        }
+
+        let timestamp = state.lastUpdated == .distantPast ? Date() : state.lastUpdated
+        var normalizedState = state
+        normalizedState.bundleIdentifier = sourceID
+
+        if let existingIndex = mediaSources.firstIndex(where: { $0.id == sourceID }) {
+            normalizedState = mergedIncomingState(normalizedState, existingState: mediaSources[existingIndex].state)
+            mediaSources[existingIndex].state = normalizedState
+            mediaSources[existingIndex].lastSeen = timestamp
+        } else {
+            mediaSources.append(MediaSourceItem(id: sourceID, state: normalizedState, lastSeen: timestamp))
+        }
+
+        mediaSources.sort { $0.lastSeen > $1.lastSeen }
+
+        if selectedSourceID == nil || !isManualSelectionActive {
+            selectedSourceID = mediaSources.first?.id
+        }
+    }
+
+    @MainActor
+    private func pruneStaleSources(referenceDate: Date) {
+        let now = referenceDate == .distantPast ? Date() : referenceDate
+        let pausedCutoff = now.addingTimeInterval(-stalePausedSourceTimeout)
+        let playingCutoff = now.addingTimeInterval(-stalePlayingSourceTimeout)
+        mediaSources.removeAll { source in
+            let cutoff = source.state.isPlaying ? playingCutoff : pausedCutoff
+            return source.lastSeen < cutoff
+        }
+
+        pruneSourceCommandControllers(retainedIDs: Set(mediaSources.map(\.id)))
+
+        if let selectedSourceID, !mediaSources.contains(where: { $0.id == selectedSourceID }) {
+            self.selectedSourceID = mediaSources.first?.id
+            lastManualSourceSelectionDate = nil
+        }
+    }
+
+    private func pruneSourceCommandControllers(retainedIDs: Set<String>) {
+        for key in sourceCommandControllers.keys where !retainedIDs.contains(key) {
+            sourceCommandControllers.removeValue(forKey: key)
+        }
+    }
+
+    private func resolvedDisplayState(fallback: PlaybackState) -> PlaybackState {
+        guard let selectedSource else {
+            return fallback
+        }
+        return selectedSource.state
+    }
+
+    private var isManualSelectionActive: Bool {
+        guard let lastManualSourceSelectionDate else { return false }
+        return Date().timeIntervalSince(lastManualSourceSelectionDate) < manualSelectionHoldDuration
+    }
+
+    private func normalizedSourceIdentifier(from bundleIdentifier: String) -> String {
+        if bundleIdentifier.isEmpty {
+            return "unknown.media.source"
+        }
+        return bundleIdentifier
+    }
+
+    private func shouldIgnoreIncomingState(_ state: PlaybackState, normalizedSourceID: String) -> Bool {
+        if isPlaceholderPlaybackState(state) {
+            // Never promote bootstrap/default values into a visible carousel source.
+            return true
+        }
+
+        if normalizedSourceID == "unknown.media.source" {
+            // Unknown source must contain at least some real media signal.
+            return !hasMeaningfulMediaContent(state)
+        }
+
+        return false
+    }
+
+    private func mergedIncomingState(_ incomingState: PlaybackState, existingState: PlaybackState) -> PlaybackState {
+        var merged = incomingState
+
+        // Keep prior artwork/details when source updates arrive partially.
+        if merged.artwork == nil {
+            merged.artwork = existingState.artwork
+        }
+        if merged.title.isEmpty || merged.title == "I'm Handsome" {
+            merged.title = existingState.title
+        }
+        if merged.artist.isEmpty || merged.artist == "Me" {
+            merged.artist = existingState.artist
+        }
+        if merged.album.isEmpty || merged.album == "Self Love" {
+            merged.album = existingState.album
+        }
+        if merged.duration <= 0 {
+            merged.duration = existingState.duration
+        }
+        if merged.currentTime <= 0 && existingState.currentTime > 0 && !merged.isPlaying {
+            merged.currentTime = existingState.currentTime
+        }
+        if merged.bundleIdentifier.isEmpty {
+            merged.bundleIdentifier = existingState.bundleIdentifier
+        }
+
+        return merged
+    }
+
+    private func isPlaceholderPlaybackState(_ state: PlaybackState) -> Bool {
+        state.title == "I'm Handsome" &&
+            state.artist == "Me" &&
+            state.album == "Self Love" &&
+            state.duration == 0 &&
+            state.currentTime == 0 &&
+            state.artwork == nil &&
+            !state.isPlaying
+    }
+
+    private func hasMeaningfulMediaContent(_ state: PlaybackState) -> Bool {
+        if state.artwork != nil {
+            return true
+        }
+        if state.duration > 0 || state.currentTime > 0 {
+            return true
+        }
+
+        let titleMeaningful = !state.title.isEmpty && state.title != "I'm Handsome"
+        let artistMeaningful = !state.artist.isEmpty && state.artist != "Me"
+        let albumMeaningful = !state.album.isEmpty && state.album != "Self Love"
+
+        return titleMeaningful || artistMeaningful || albumMeaningful || state.isPlaying
     }
 
     func toggleFavoriteTrack() {
@@ -329,7 +565,7 @@ class MusicManager: ObservableObject {
 
     func setFavorite(_ favorite: Bool) {
         guard canFavoriteTrack else { return }
-        guard let controller = activeController else { return }
+        guard let controller = commandControllerForSelectedSource() else { return }
 
         Task { @MainActor in
             await controller.setFavorite(favorite)
@@ -446,55 +682,55 @@ class MusicManager: ObservableObject {
     // MARK: - Public Methods for controlling playback
     func playPause() {
         Task {
-            await activeController?.togglePlay()
+            await commandControllerForSelectedSource()?.togglePlay()
         }
     }
 
     func play() {
         Task {
-            await activeController?.play()
+            await commandControllerForSelectedSource()?.play()
         }
     }
 
     func pause() {
         Task {
-            await activeController?.pause()
+            await commandControllerForSelectedSource()?.pause()
         }
     }
 
     func toggleShuffle() {
         Task {
-            await activeController?.toggleShuffle()
+            await commandControllerForSelectedSource()?.toggleShuffle()
         }
     }
 
     func toggleRepeat() {
         Task {
-            await activeController?.toggleRepeat()
+            await commandControllerForSelectedSource()?.toggleRepeat()
         }
     }
     
     func togglePlay() {
         Task {
-            await activeController?.togglePlay()
+            await commandControllerForSelectedSource()?.togglePlay()
         }
     }
 
     func nextTrack() {
         Task {
-            await activeController?.nextTrack()
+            await commandControllerForSelectedSource()?.nextTrack()
         }
     }
 
     func previousTrack() {
         Task {
-            await activeController?.previousTrack()
+            await commandControllerForSelectedSource()?.previousTrack()
         }
     }
 
     func seek(to position: TimeInterval) {
         Task {
-            await activeController?.seek(to: position)
+            await commandControllerForSelectedSource()?.seek(to: position)
         }
     }
     func skip(seconds: TimeInterval) {
@@ -503,10 +739,82 @@ class MusicManager: ObservableObject {
     }
     
     func setVolume(to level: Double) {
-        if let controller = activeController {
+        if let controller = commandControllerForSelectedSource() {
             Task {
                 await controller.setVolume(level)
             }
+        }
+    }
+
+    private func updateControlCapabilities(for bundleIdentifier: String?) {
+        guard let bundleIdentifier, !bundleIdentifier.isEmpty else {
+            self.volumeControlSupported = activeController?.supportsVolumeControl ?? false
+            self.canFavoriteTrack = activeController?.supportsFavorite ?? false
+            return
+        }
+
+        if let selectedType = mediaControllerType(for: bundleIdentifier) {
+            if let selectedController = commandController(for: bundleIdentifier, type: selectedType) {
+                self.volumeControlSupported = selectedController.supportsVolumeControl
+                self.canFavoriteTrack = selectedController.supportsFavorite
+                return
+            }
+        }
+
+        self.volumeControlSupported = activeController?.supportsVolumeControl ?? false
+        self.canFavoriteTrack = activeController?.supportsFavorite ?? false
+    }
+
+    private func commandControllerForSelectedSource() -> (any MediaControllerProtocol)? {
+        guard let selectedBundleID = selectedSource?.state.bundleIdentifier ?? bundleIdentifier else {
+            return activeController
+        }
+
+        if let preferredType = mediaControllerType(for: selectedBundleID) {
+            if controller(activeController, matches: preferredType) {
+                return activeController
+            }
+            return commandController(for: selectedBundleID, type: preferredType) ?? activeController
+        }
+
+        return activeController
+    }
+
+    private func commandController(for bundleIdentifier: String, type: MediaControllerType) -> (any MediaControllerProtocol)? {
+        if let cachedController = sourceCommandControllers[bundleIdentifier] {
+            return cachedController
+        }
+        guard let newController = makeController(for: type) else {
+            return nil
+        }
+        sourceCommandControllers[bundleIdentifier] = newController
+        return newController
+    }
+
+    private func mediaControllerType(for bundleIdentifier: String) -> MediaControllerType? {
+        switch bundleIdentifier {
+        case "com.apple.Music":
+            return .appleMusic
+        case "com.spotify.client":
+            return .spotify
+        case YouTubeMusicConfiguration.default.bundleIdentifier:
+            return .youtubeMusic
+        default:
+            return nil
+        }
+    }
+
+    private func controller(_ controller: (any MediaControllerProtocol)?, matches type: MediaControllerType) -> Bool {
+        guard let controller else { return false }
+        switch type {
+        case .nowPlaying:
+            return controller is NowPlayingController
+        case .appleMusic:
+            return controller is AppleMusicController
+        case .spotify:
+            return controller is SpotifyController
+        case .youtubeMusic:
+            return controller is YouTubeMusicController
         }
     }
     func openMusicApp() {
@@ -531,15 +839,26 @@ class MusicManager: ObservableObject {
     }
 
     func forceUpdate() {
-        // Request immediate update from the active controller
-        Task { [weak self] in
-            if self?.activeController?.isActive() == true {
-                if let youtubeController = self?.activeController as? YouTubeMusicController {
-                    await youtubeController.pollPlaybackState()
-                } else {
-                    await self?.activeController?.updatePlaybackInfo()
-                }
-            }
+        Task { @MainActor [weak self] in
+            await self?.refreshAllPlaybackFeeds()
+        }
+    }
+
+    @MainActor
+    private func refreshAllPlaybackFeeds() async {
+        if let active = activeController, active.isActive() {
+            await refreshFeed(for: active)
+        }
+        for discovery in discoveryControllers where discovery.isActive() {
+            await refreshFeed(for: discovery)
+        }
+    }
+
+    private func refreshFeed(for controller: any MediaControllerProtocol) async {
+        if let youtubeController = controller as? YouTubeMusicController {
+            await youtubeController.pollPlaybackState()
+        } else {
+            await controller.updatePlaybackInfo()
         }
     }
     
@@ -588,3 +907,67 @@ class MusicManager: ObservableObject {
         }
     }
 }
+
+#if DEBUG
+extension MusicManager {
+    @MainActor
+    func test_resetMediaSources() {
+        resetSourceCarouselState()
+        sourceCommandControllers.removeAll()
+    }
+
+    @MainActor
+    func test_ingestPlaybackState(_ state: PlaybackState) {
+        updateFromPlaybackState(state)
+    }
+
+    @MainActor
+    var test_mediaSources: [MediaSourceItem] {
+        mediaSources
+    }
+
+    @MainActor
+    var test_selectedSourceID: String? {
+        selectedSourceID
+    }
+
+    @MainActor
+    var test_resolvedControllerTypeForSelectedSource: MediaControllerType? {
+        guard let selectedBundleID = selectedSource?.state.bundleIdentifier ?? bundleIdentifier else {
+            return nil
+        }
+        return mediaControllerType(for: selectedBundleID)
+    }
+
+    @MainActor
+    func test_setCommandController(for bundleIdentifier: String, controller: any MediaControllerProtocol) {
+        sourceCommandControllers[bundleIdentifier] = controller
+    }
+
+    @MainActor
+    func test_selectSource(bundleIdentifier: String) {
+        guard let sourceIndex = mediaSources.firstIndex(where: { $0.id == bundleIdentifier }) else { return }
+        selectMediaSource(at: sourceIndex)
+    }
+
+    @MainActor
+    func test_commandPlay() async {
+        await commandControllerForSelectedSource()?.play()
+    }
+
+    @MainActor
+    func test_commandPause() async {
+        await commandControllerForSelectedSource()?.pause()
+    }
+
+    @MainActor
+    func test_commandNextTrack() async {
+        await commandControllerForSelectedSource()?.nextTrack()
+    }
+
+    @MainActor
+    func test_commandSeek(to position: TimeInterval) async {
+        await commandControllerForSelectedSource()?.seek(to: position)
+    }
+}
+#endif

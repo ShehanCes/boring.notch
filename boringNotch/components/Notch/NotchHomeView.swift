@@ -67,6 +67,49 @@ struct AlbumArtView: View {
             
             albumArtDarkOverlay
         }
+        .overlay(alignment: .bottom) {
+            sourceCarouselOverlay
+                .padding(.horizontal, 8)
+                .offset(y: 8)
+        }
+    }
+
+    @ViewBuilder
+    private var sourceCarouselOverlay: some View {
+        if vm.notchState == .open && musicManager.shouldShowMediaSourceCarousel {
+            HStack(spacing: 8) {
+                sourceNavButton(systemName: "chevron.left") {
+                    MusicManager.shared.selectPreviousMediaSource()
+                }
+
+                HStack(spacing: 6) {
+                    ForEach(Array(musicManager.mediaSources.enumerated()), id: \.element.id) { index, source in
+                        Circle()
+                            .fill(index == musicManager.selectedSourceIndex ? Color.white : Color.white.opacity(source.state.isPlaying ? 0.85 : 0.7))
+                            .frame(width: 6, height: 6)
+                            .shadow(color: .black.opacity(0.45), radius: 1, y: 1)
+                            .onTapGesture {
+                                MusicManager.shared.selectMediaSource(at: index)
+                            }
+                    }
+                }
+
+                sourceNavButton(systemName: "chevron.right") {
+                    MusicManager.shared.selectNextMediaSource()
+                }
+            }
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    private func sourceNavButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.white)
+                .shadow(color: .black.opacity(0.5), radius: 1.5, y: 1)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 
     private var albumArtDarkOverlay: some View {
