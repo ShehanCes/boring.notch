@@ -7,6 +7,7 @@
 import AppKit
 import Combine
 import Defaults
+import MediaPlayer
 import SwiftUI
 
 let defaultImage: NSImage = .init(
@@ -24,6 +25,12 @@ class MusicManager: ObservableObject {
     private var discoveryCancellables = Set<AnyCancellable>()
     private var debounceIdleTask: Task<Void, Never>?
     private var sourceCommandControllers: [String: any MediaControllerProtocol] = [:]
+    private let browserBundleIdentifiers: Set<String> = [
+        "com.google.Chrome",
+        "com.brave.Browser",
+        "org.mozilla.firefox",
+        "com.apple.Safari",
+    ]
 
     // Helper to check if macOS has removed support for NowPlayingController
     public private(set) var isNowPlayingDeprecated: Bool = false
@@ -45,6 +52,7 @@ class MusicManager: ObservableObject {
     @Published var audioCaptureBundleIdentifiers: [String] = []
     @Published var songDuration: TimeInterval = 0
     @Published var elapsedTime: TimeInterval = 0
+    @Published var isLiveStream: Bool = false
     @Published var timestampDate: Date = .init()
     @Published var playbackRate: Double = 1
     @Published var isShuffled: Bool = false
@@ -301,6 +309,7 @@ class MusicManager: ObservableObject {
         let shuffleChanged = state.isShuffled != self.isShuffled
         let repeatModeChanged = state.repeatMode != self.repeatMode
         let volumeChanged = state.volume != self.volume
+        let liveChanged = state.isLive != self.isLiveStream
         
         if state.title != self.songTitle {
             self.songTitle = state.title
@@ -350,8 +359,43 @@ class MusicManager: ObservableObject {
         if volumeChanged {
             self.volume = state.volume
         }
+
+        if liveChanged {
+            self.isLiveStream = state.isLive
+        }
         
         self.timestampDate = state.lastUpdated
+        updateSystemNowPlayingInfo(with: state)
+    }
+
+    @MainActor
+    private func updateSystemNowPlayingInfo(with state: PlaybackState) {
+        var nowPlayingInfo: [String: Any] = [
+            MPMediaItemPropertyTitle: state.title,
+            MPMediaItemPropertyArtist: state.artist,
+            MPNowPlayingInfoPropertyPlaybackRate: state.isPlaying ? state.playbackRate : 0.0,
+            MPNowPlayingInfoPropertyIsLiveStream: NSNumber(value: state.isLive)
+        ]
+
+        if !state.album.isEmpty {
+            nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = state.album
+        }
+
+        if !state.isLive {
+            nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = state.currentTime
+            if state.duration > 0 {
+                nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = state.duration
+            }
+        }
+
+        if let artworkData = state.artwork, let image = NSImage(data: artworkData) {
+            let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
+        }
+
+        let nowPlayingCenter = MPNowPlayingInfoCenter.default()
+        nowPlayingCenter.nowPlayingInfo = nowPlayingInfo
+        nowPlayingCenter.playbackState = state.isPlaying ? .playing : .paused
     }
 
     var selectedSourceIndex: Int {
@@ -401,21 +445,20 @@ class MusicManager: ObservableObject {
 
     @MainActor
     private func upsertMediaSource(with state: PlaybackState) {
-        let sourceID = normalizedSourceIdentifier(from: state.bundleIdentifier)
-        if shouldIgnoreIncomingState(state, normalizedSourceID: sourceID) {
+        let sourceID = sourceIdentifier(for: state)
+        if shouldIgnoreIncomingState(state, sourceIdentifier: sourceID) {
             return
         }
 
         let timestamp = state.lastUpdated == .distantPast ? Date() : state.lastUpdated
-        var normalizedState = state
-        normalizedState.bundleIdentifier = sourceID
+        var sourceState = state
 
         if let existingIndex = mediaSources.firstIndex(where: { $0.id == sourceID }) {
-            normalizedState = mergedIncomingState(normalizedState, existingState: mediaSources[existingIndex].state)
-            mediaSources[existingIndex].state = normalizedState
+            sourceState = mergedIncomingState(sourceState, existingState: mediaSources[existingIndex].state)
+            mediaSources[existingIndex].state = sourceState
             mediaSources[existingIndex].lastSeen = timestamp
         } else {
-            mediaSources.append(MediaSourceItem(id: sourceID, state: normalizedState, lastSeen: timestamp))
+            mediaSources.append(MediaSourceItem(id: sourceID, state: sourceState, lastSeen: timestamp))
         }
 
         mediaSources.sort { $0.lastSeen > $1.lastSeen }
@@ -435,7 +478,13 @@ class MusicManager: ObservableObject {
             return source.lastSeen < cutoff
         }
 
-        pruneSourceCommandControllers(retainedIDs: Set(mediaSources.map(\.id)))
+        pruneSourceCommandControllers(
+            retainedBundleIdentifiers: Set(
+                mediaSources
+                    .map(\.state.bundleIdentifier)
+                    .filter { !$0.isEmpty }
+            )
+        )
 
         if let selectedSourceID, !mediaSources.contains(where: { $0.id == selectedSourceID }) {
             self.selectedSourceID = mediaSources.first?.id
@@ -443,8 +492,8 @@ class MusicManager: ObservableObject {
         }
     }
 
-    private func pruneSourceCommandControllers(retainedIDs: Set<String>) {
-        for key in sourceCommandControllers.keys where !retainedIDs.contains(key) {
+    private func pruneSourceCommandControllers(retainedBundleIdentifiers: Set<String>) {
+        for key in sourceCommandControllers.keys where !retainedBundleIdentifiers.contains(key) {
             sourceCommandControllers.removeValue(forKey: key)
         }
     }
@@ -468,13 +517,52 @@ class MusicManager: ObservableObject {
         return bundleIdentifier
     }
 
-    private func shouldIgnoreIncomingState(_ state: PlaybackState, normalizedSourceID: String) -> Bool {
+    private func sourceIdentifier(for state: PlaybackState) -> String {
+        let normalizedBundleID = normalizedSourceIdentifier(from: state.bundleIdentifier)
+        guard normalizedBundleID != "unknown.media.source" else {
+            return normalizedBundleID
+        }
+        guard browserBundleIdentifiers.contains(normalizedBundleID) else {
+            return normalizedBundleID
+        }
+        guard let browserBucket = browserMediaBucket(for: state) else {
+            return normalizedBundleID
+        }
+        return "\(normalizedBundleID)::\(browserBucket)"
+    }
+
+    private func browserMediaBucket(for state: PlaybackState) -> String? {
+        let lowercasedTitle = state.title.lowercased()
+        let lowercasedAlbum = state.album.lowercased()
+        let artistMeaningful = !state.artist.isEmpty && state.artist != "Me"
+        let albumMeaningful = !state.album.isEmpty && state.album != "Self Love"
+
+        if lowercasedTitle.contains("youtube music") || lowercasedAlbum.contains("youtube music") {
+            return "web-audio"
+        }
+
+        if lowercasedTitle.contains(" - youtube") || lowercasedTitle.hasSuffix("youtube") {
+            return "web-video"
+        }
+
+        if lowercasedTitle.contains("youtube"), !artistMeaningful, !albumMeaningful {
+            return "web-video"
+        }
+
+        if artistMeaningful || albumMeaningful {
+            return "web-audio"
+        }
+
+        return nil
+    }
+
+    private func shouldIgnoreIncomingState(_ state: PlaybackState, sourceIdentifier: String) -> Bool {
         if isPlaceholderPlaybackState(state) {
             // Never promote bootstrap/default values into a visible carousel source.
             return true
         }
 
-        if normalizedSourceID == "unknown.media.source" {
+        if sourceIdentifier == "unknown.media.source" {
             // Unknown source must contain at least some real media signal.
             return !hasMeaningfulMediaContent(state)
         }
@@ -658,6 +746,13 @@ class MusicManager: ObservableObject {
 
     // MARK: - Playback Position Estimation
     public func estimatedPlaybackPosition(at date: Date = Date()) -> TimeInterval {
+        if isLiveStream {
+            guard isPlaying else { return max(0, elapsedTime) }
+            let timeDifference = date.timeIntervalSince(timestampDate)
+            let estimated = elapsedTime + (timeDifference * playbackRate)
+            return max(0, estimated)
+        }
+
         guard isPlaying else { return min(elapsedTime, songDuration) }
 
         let timeDifference = date.timeIntervalSince(timestampDate)
@@ -735,11 +830,13 @@ class MusicManager: ObservableObject {
     }
 
     func seek(to position: TimeInterval) {
+        guard !isLiveStream else { return }
         Task {
             await commandControllerForSelectedSource()?.seek(to: position)
         }
     }
     func skip(seconds: TimeInterval) {
+        guard !isLiveStream else { return }
         let newPos = min(max(0, elapsedTime + seconds), songDuration)
         seek(to: newPos)
     }

@@ -81,7 +81,7 @@ struct AlbumArtView: View {
         .overlay(alignment: .bottom) {
             sourceCarouselOverlay
                 .padding(.horizontal, 8)
-                .offset(y: 8)
+                .offset(y: 12)
         }
     }
 
@@ -89,14 +89,19 @@ struct AlbumArtView: View {
     private var sourceCarouselOverlay: some View {
         if vm.notchState == .open && musicManager.shouldShowMediaSourceCarousel {
             HStack(spacing: 8) {
-                sourceNavButton(systemName: "chevron.left") {
-                    MusicManager.shared.selectPreviousMediaSource()
-                }
+                sourceNavButton(
+                    systemName: "chevron.left",
+                    action: {
+                        guard canNavigateToPreviousSource else { return }
+                        MusicManager.shared.selectMediaSource(at: musicManager.selectedSourceIndex - 1)
+                    },
+                    enabled: canNavigateToPreviousSource
+                )
 
                 HStack(spacing: 6) {
                     ForEach(Array(musicManager.mediaSources.enumerated()), id: \.element.id) { index, source in
                         Circle()
-                            .fill(index == musicManager.selectedSourceIndex ? Color.white : Color.white.opacity(source.state.isPlaying ? 0.85 : 0.7))
+                            .fill(index == musicManager.selectedSourceIndex ? Color.white : inactiveSourceDotColor(for: source))
                             .frame(width: 6, height: 6)
                             .shadow(color: .black.opacity(0.45), radius: 1, y: 1)
                             .onTapGesture {
@@ -105,21 +110,43 @@ struct AlbumArtView: View {
                     }
                 }
 
-                sourceNavButton(systemName: "chevron.right") {
-                    MusicManager.shared.selectNextMediaSource()
-                }
+                sourceNavButton(
+                    systemName: "chevron.right",
+                    action: {
+                        guard canNavigateToNextSource else { return }
+                        MusicManager.shared.selectMediaSource(at: musicManager.selectedSourceIndex + 1)
+                    },
+                    enabled: canNavigateToNextSource
+                )
             }
             .transition(.opacity.combined(with: .move(edge: .top)))
         }
     }
 
-    private func sourceNavButton(systemName: String, action: @escaping () -> Void) -> some View {
+    private var canNavigateToPreviousSource: Bool {
+        musicManager.selectedSourceIndex > 0
+    }
+
+    private var canNavigateToNextSource: Bool {
+        musicManager.selectedSourceIndex < musicManager.mediaSources.count - 1
+    }
+
+    private func inactiveSourceDotColor(for source: MediaSourceItem) -> Color {
+        Color.gray.opacity(source.state.isPlaying ? 0.55 : 0.4)
+    }
+
+    private var disabledSourceControlColor: Color {
+        Color.gray.opacity(0.4)
+    }
+
+    private func sourceNavButton(systemName: String, action: @escaping () -> Void, enabled: Bool) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.white)
+                .foregroundColor(enabled ? .white : disabledSourceControlColor)
                 .shadow(color: .black.opacity(0.5), radius: 1.5, y: 1)
         }
+        .disabled(!enabled)
         .buttonStyle(PlainButtonStyle())
     }
 
@@ -206,6 +233,9 @@ struct MusicControlsView: View {
                         guard musicManager.isPlaying else { return musicManager.elapsedTime }
                         let delta = timeline.date.timeIntervalSince(musicManager.timestampDate)
                         let progressed = musicManager.elapsedTime + (delta * musicManager.playbackRate)
+                        if musicManager.isLiveStream {
+                            return max(progressed, 0)
+                        }
                         return min(max(progressed, 0), musicManager.songDuration)
                     }()
                     let lyricDisplay: (line: String, displayDuration: Double?, animationID: Double?) = {
@@ -256,7 +286,8 @@ struct MusicControlsView: View {
                 timestampDate: musicManager.timestampDate,
                 elapsedTime: musicManager.elapsedTime,
                 playbackRate: musicManager.playbackRate,
-                isPlaying: musicManager.isPlaying
+                isPlaying: musicManager.isPlaying,
+                isLiveStream: musicManager.isLiveStream
             ) { newValue in
                 MusicManager.shared.seek(to: newValue)
             }
@@ -523,6 +554,7 @@ struct MusicSliderView: View {
     let elapsedTime: Double
     let playbackRate: Double
     let isPlaying: Bool
+    let isLiveStream: Bool
     var onValueChange: (Double) -> Void
 
 
@@ -536,14 +568,24 @@ struct MusicSliderView: View {
                     : Defaults[.sliderColor] == SliderColorEnum.accent ? .effectiveAccent : .white,
                 dragging: $dragging,
                 lastDragged: $lastDragged,
+                isEnabled: !isLiveStream,
                 onValueChange: onValueChange
             )
             .frame(height: 10, alignment: .center)
 
             HStack {
-                Text(timeString(from: sliderValue))
+                if isLiveStream {
+                    Text("LIVE")
+                        .foregroundColor(.red)
+                } else {
+                    Text(timeString(from: sliderValue))
+                }
                 Spacer()
-                Text(timeString(from: duration))
+                if isLiveStream {
+                    Text("--:--")
+                } else {
+                    Text(timeString(from: duration))
+                }
             }
             .fontWeight(.medium)
             .foregroundColor(
@@ -579,6 +621,7 @@ struct CustomSlider: View {
     var color: Color = .white
     @Binding var dragging: Bool
     @Binding var lastDragged: Date
+    var isEnabled: Bool = true
     var onValueChange: ((Double) -> Void)?
     var onDragChange: ((Double) -> Void)?
 
@@ -603,6 +646,7 @@ struct CustomSlider: View {
             .cornerRadius(height / 2)
             .frame(height: 10)
             .contentShape(Rectangle())
+            .allowsHitTesting(isEnabled)
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { gesture in

@@ -68,6 +68,7 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     private var process: Process?
     private var pipeHandler: JSONLinesPipeHandler?
     private var streamTask: Task<Void, Never>?
+    private let liveDebugEnabled = true
 
     // MARK: - Initialization
     init?() {
@@ -229,6 +230,9 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     private func handleAdapterUpdate(_ update: NowPlayingUpdate) async {
         let payload = update.payload
         let diff = update.diff ?? false
+        if liveDebugEnabled {
+            print("[NowPlayingLiveDebug] update received diff=\(diff)")
+        }
 
         var newPlaybackState = PlaybackState(bundleIdentifier: playbackState.bundleIdentifier)
         let resolvedBundleIdentifier = (
@@ -309,8 +313,28 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         newPlaybackState.audioCaptureBundleIdentifiers = captureBundleIdentifiers
         
         newPlaybackState.volume = payload.volume ?? (diff ? self.playbackState.volume : 0.5)
+        if let isLive = payload.resolvedIsLive {
+            newPlaybackState.isLive = isLive
+        } else if diff {
+            newPlaybackState.isLive = self.playbackState.isLive
+        } else {
+            newPlaybackState.isLive = false
+        }
         
         self.playbackState = newPlaybackState
+        if liveDebugEnabled {
+            let rawFields = [
+                "isLive=\(String(describing: payload.isLive))",
+                "isLiveStream=\(String(describing: payload.isLiveStream))",
+                "isLiveContent=\(String(describing: payload.isLiveContent))",
+                "isLiveNow=\(String(describing: payload.isLiveNow))",
+                "isSeekableLive=\(String(describing: payload.isSeekableLive))",
+                "isDvrEnabled=\(String(describing: payload.isDvrEnabled))",
+                "canSeek=\(String(describing: payload.canSeek))",
+                "streamType=\(String(describing: payload.streamType))"
+            ].joined(separator: " | ")
+            print("[NowPlayingLiveDebug] resolvedIsLive=\(String(describing: payload.resolvedIsLive)) fields: \(rawFields)")
+        }
         
         // Fetch favorite state for supported apps asynchronously
         // await fetchFavoriteStateIfSupported()
@@ -372,6 +396,94 @@ struct NowPlayingPayload: Codable {
     let parentApplicationBundleIdentifier: String?
     let bundleIdentifier: String?
     let volume: Double?
+    let isLive: Bool?
+    let isLiveStream: Bool?
+    let isLiveContent: Bool?
+    let isLiveNow: Bool?
+    let isSeekableLive: Bool?
+    let isDvrEnabled: Bool?
+    let canSeek: Bool?
+    let streamType: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case title
+        case artist
+        case album
+        case duration
+        case elapsedTime
+        case shuffleMode
+        case repeatMode
+        case artworkData
+        case timestamp
+        case playbackRate
+        case playing
+        case parentApplicationBundleIdentifier
+        case bundleIdentifier
+        case volume
+        case isLive
+        case isLiveStream
+        case isLiveContent
+        case isLiveNow
+        case isSeekableLive
+        case isDvrEnabled
+        case canSeek
+        case streamType
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        artist = try container.decodeIfPresent(String.self, forKey: .artist)
+        album = try container.decodeIfPresent(String.self, forKey: .album)
+        duration = try container.decodeIfPresent(Double.self, forKey: .duration)
+        elapsedTime = try container.decodeIfPresent(Double.self, forKey: .elapsedTime)
+        shuffleMode = try container.decodeIfPresent(Int.self, forKey: .shuffleMode)
+        repeatMode = try container.decodeIfPresent(Int.self, forKey: .repeatMode)
+        artworkData = try container.decodeIfPresent(String.self, forKey: .artworkData)
+        timestamp = try container.decodeIfPresent(String.self, forKey: .timestamp)
+        playbackRate = try container.decodeIfPresent(Double.self, forKey: .playbackRate)
+        playing = try container.decodeIfPresent(Bool.self, forKey: .playing)
+        parentApplicationBundleIdentifier = try container.decodeIfPresent(String.self, forKey: .parentApplicationBundleIdentifier)
+        bundleIdentifier = try container.decodeIfPresent(String.self, forKey: .bundleIdentifier)
+        volume = try container.decodeIfPresent(Double.self, forKey: .volume)
+        isLive = Self.decodeLossyBool(from: container, key: .isLive)
+        isLiveStream = Self.decodeLossyBool(from: container, key: .isLiveStream)
+        isLiveContent = Self.decodeLossyBool(from: container, key: .isLiveContent)
+        isLiveNow = Self.decodeLossyBool(from: container, key: .isLiveNow)
+        isSeekableLive = Self.decodeLossyBool(from: container, key: .isSeekableLive)
+        isDvrEnabled = Self.decodeLossyBool(from: container, key: .isDvrEnabled)
+        canSeek = Self.decodeLossyBool(from: container, key: .canSeek)
+        streamType = try container.decodeIfPresent(String.self, forKey: .streamType)
+    }
+
+    private static func decodeLossyBool(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        key: CodingKeys
+    ) -> Bool? {
+        if let bool = try? container.decodeIfPresent(Bool.self, forKey: key) {
+            return bool
+        }
+        if let int = try? container.decode(Int.self, forKey: key) {
+            return int != 0
+        }
+        if let string = try? container.decode(String.self, forKey: key) {
+            let lowered = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if lowered == "true" || lowered == "1" { return true }
+            if lowered == "false" || lowered == "0" { return false }
+        }
+        return nil
+    }
+
+    var resolvedIsLive: Bool? {
+        if let value = isLive { return value }
+        if let value = isLiveStream { return value }
+        if let value = isLiveContent { return value }
+        if let value = isLiveNow { return value }
+        if let type = streamType?.lowercased(), type == "live" {
+            return true
+        }
+        return nil
+    }
 }
 
 actor JSONLinesPipeHandler {

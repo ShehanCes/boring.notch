@@ -28,6 +28,7 @@ struct PlaybackState {
     var lastUpdated: Date = Date.distantPast
     var artwork: Data?
     var volume: Double = 0.5
+    var isLive: Bool = false
     var isFavorite: Bool = false
 
     var effectiveAudioCaptureBundleIdentifiers: [String] {
@@ -60,6 +61,7 @@ extension PlaybackState: Equatable {
             && lhs.isShuffled == rhs.isShuffled
             && lhs.repeatMode == rhs.repeatMode
             && lhs.artwork == rhs.artwork
+            && lhs.isLive == rhs.isLive
             && lhs.isFavorite == rhs.isFavorite
     }
 }

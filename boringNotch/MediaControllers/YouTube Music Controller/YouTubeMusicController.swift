@@ -53,6 +53,11 @@ final class YouTubeMusicController: MediaControllerProtocol {
     private var appStateObserver: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var reconnectDelay: TimeInterval = 1.0
+    #if DEBUG
+    private let liveDebugEnabled = true
+    #else
+    private let liveDebugEnabled = false
+    #endif
     
     // MARK: - Initialization
     init(configuration: YouTubeMusicConfiguration = .default) {
@@ -154,7 +159,7 @@ final class YouTubeMusicController: MediaControllerProtocol {
     private func setupAppStateObserver() {
         appStateObserver = Task { [weak self] in
             await withTaskGroup(of: Void.self) { group in
-                group.addTask {
+                group.addTask { @MainActor in
                     let launchNotifications = NSWorkspace.shared.notificationCenter.notifications(
                         named: NSWorkspace.didLaunchApplicationNotification
                     )
@@ -164,7 +169,7 @@ final class YouTubeMusicController: MediaControllerProtocol {
                     }
                 }
                 
-                group.addTask {
+                group.addTask { @MainActor in
                     let terminateNotifications = NSWorkspace.shared.notificationCenter.notifications(
                         named: NSWorkspace.didTerminateApplicationNotification
                     )
@@ -254,6 +259,9 @@ final class YouTubeMusicController: MediaControllerProtocol {
     private func handleWebSocketMessage(_ data: Data) async {
         guard let message = WebSocketMessage(from: data) else {
             if let response = try? JSONDecoder().decode(PlaybackResponse.self, from: data) {
+                if liveDebugEnabled {
+                    print("[YouTubeLiveDebug][WS non-typed payload] decoded-only isLive=\(String(describing: response.isLive)) isSeekableLive=\(String(describing: response.isSeekableLive))")
+                }
                 await updatePlaybackState(with: response)
             }
             return
@@ -262,6 +270,9 @@ final class YouTubeMusicController: MediaControllerProtocol {
         case .playerInfo, .videoChanged, .playerStateChanged:
             if let data = message.extractData(),
                let response = PlaybackResponse.from(websocketData: data) {
+                if liveDebugEnabled {
+                    logWebSocketLiveMetadata(messageType: message.type.rawValue, payload: data, parsed: response)
+                }
                 await updatePlaybackState(with: response)
             }
 
@@ -494,6 +505,10 @@ final class YouTubeMusicController: MediaControllerProtocol {
             newState.volume = volume / 100.0
         }
 
+        if let isLive = response.isLive {
+            newState.isLive = isLive
+        }
+
         if newState != playbackState {
             playbackState = newState
 
@@ -538,6 +553,48 @@ final class YouTubeMusicController: MediaControllerProtocol {
             default: break
         }
         if let target, target != playbackState.repeatMode { playbackState.repeatMode = target }
+    }
+
+    private func logWebSocketLiveMetadata(messageType: String, payload: [String: Any], parsed: PlaybackResponse) {
+        let keysToProbe: [[String]] = [
+            ["isLive"], ["isLiveContent"], ["isLiveNow"], ["isLiveStream"], ["live"],
+            ["song", "isLive"], ["song", "isLiveContent"], ["song", "isLiveNow"], ["song", "isLiveStream"], ["song", "live"],
+            ["videoDetails", "isLive"], ["videoDetails", "isLiveContent"], ["videoDetails", "isLiveNow"],
+            ["playerResponse", "videoDetails", "isLive"], ["playerResponse", "videoDetails", "isLiveContent"], ["playerResponse", "videoDetails", "isLiveNow"],
+            ["playerResponse", "microformat", "playerMicroformatRenderer", "liveBroadcastDetails", "isLiveNow"],
+            ["isSeekableLive"], ["isDvrEnabled"], ["isLiveDVR"], ["canSeek"],
+            ["song", "isSeekableLive"], ["song", "isDvrEnabled"], ["song", "isLiveDVR"], ["song", "canSeek"],
+            ["videoDetails", "isLiveDvrEnabled"], ["videoDetails", "isLiveDVR"],
+            ["playerResponse", "videoDetails", "isLiveDvrEnabled"], ["playerResponse", "videoDetails", "isLiveDVR"]
+        ]
+
+        var parts: [String] = []
+        for keyPath in keysToProbe {
+            if let value = value(at: keyPath, in: payload) {
+                parts.append("\(keyPath.joined(separator: "."))=\(value)")
+            }
+        }
+
+        let liveSummary = "parsed.isLive=\(String(describing: parsed.isLive)) parsed.isSeekableLive=\(String(describing: parsed.isSeekableLive))"
+        if parts.isEmpty {
+            let topLevelKeys = payload.keys.sorted().joined(separator: ",")
+            let songKeys = (payload["song"] as? [String: Any])?.keys.sorted().joined(separator: ",") ?? "none"
+            print("[YouTubeLiveDebug][WS \(messageType)] \(liveSummary) no live-related keys found topLevelKeys=[\(topLevelKeys)] songKeys=[\(songKeys)]")
+        } else {
+            print("[YouTubeLiveDebug][WS \(messageType)] \(liveSummary) fields: \(parts.joined(separator: " | "))")
+        }
+    }
+
+    private func value(at keyPath: [String], in dict: [String: Any]) -> Any? {
+        guard !keyPath.isEmpty else { return nil }
+        var current: Any = dict
+        for key in keyPath {
+            guard let object = current as? [String: Any], let next = object[key] else {
+                return nil
+            }
+            current = next
+        }
+        return current
     }
     
 }

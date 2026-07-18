@@ -169,6 +169,63 @@ final class MusicManagerSourceRoutingTests: XCTestCase {
         XCTAssertEqual(manager.test_resolvedControllerTypeForSelectedSource, .youtubeMusic)
     }
 
+    func testBrowserAudioAndVideoAreStoredAsSeparateSources() {
+        let start = Date()
+        manager.test_ingestPlaybackState(
+            makeState(
+                bundleIdentifier: "com.google.Chrome",
+                title: "Song One",
+                artist: "Artist One",
+                album: "Album One",
+                isPlaying: true,
+                timestamp: start
+            )
+        )
+        manager.test_ingestPlaybackState(
+            makeState(
+                bundleIdentifier: "com.google.Chrome",
+                title: "Demo Clip - YouTube",
+                artist: "",
+                album: "",
+                isPlaying: true,
+                timestamp: start.addingTimeInterval(1)
+            )
+        )
+
+        let ids = Set(manager.test_mediaSources.map(\.id))
+        XCTAssertEqual(ids.count, 2)
+        XCTAssertTrue(ids.contains("com.google.Chrome::web-audio"))
+        XCTAssertTrue(ids.contains("com.google.Chrome::web-video"))
+    }
+
+    func testBrowserAudioTrackChangesDoNotCreateNewSource() {
+        let start = Date()
+        manager.test_ingestPlaybackState(
+            makeState(
+                bundleIdentifier: "com.google.Chrome",
+                title: "Song One",
+                artist: "Artist One",
+                album: "Album One",
+                isPlaying: true,
+                timestamp: start
+            )
+        )
+        manager.test_ingestPlaybackState(
+            makeState(
+                bundleIdentifier: "com.google.Chrome",
+                title: "Song Two",
+                artist: "Artist Two",
+                album: "Album Two",
+                isPlaying: true,
+                timestamp: start.addingTimeInterval(1)
+            )
+        )
+
+        XCTAssertEqual(manager.test_mediaSources.count, 1)
+        XCTAssertEqual(manager.test_mediaSources.first?.id, "com.google.Chrome::web-audio")
+        XCTAssertEqual(manager.test_mediaSources.first?.state.title, "Song Two")
+    }
+
     private func makeState(
         bundleIdentifier: String,
         title: String,

@@ -13,6 +13,11 @@ final class YouTubeMusicHTTPClient: ObservableObject {
     private let baseURL: String
     private static let decoder = JSONDecoder()
     private static let encoder = JSONEncoder()
+    #if DEBUG
+    private let liveDebugEnabled = true
+    #else
+    private let liveDebugEnabled = false
+    #endif
     
     init(baseURL: String) {
         self.baseURL = baseURL
@@ -49,7 +54,60 @@ final class YouTubeMusicHTTPClient: ObservableObject {
             method: "GET",
             token: token
         )
-        return try Self.decoder.decode(PlaybackResponse.self, from: data)
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let response = PlaybackResponse.from(websocketData: json) {
+            if liveDebugEnabled {
+                debugLogLiveFields(prefix: "HTTP /song", payload: json, parsed: response)
+            }
+            return response
+        }
+        let decoded = try Self.decoder.decode(PlaybackResponse.self, from: data)
+        if liveDebugEnabled {
+            print("[YouTubeLiveDebug][HTTP /song][decoded-only] isLive=\(String(describing: decoded.isLive)) isSeekableLive=\(String(describing: decoded.isSeekableLive))")
+        }
+        return decoded
+    }
+
+    private func debugLogLiveFields(prefix: String, payload: [String: Any], parsed: PlaybackResponse) {
+        let keysToProbe: [[String]] = [
+            ["isLive"], ["isLiveContent"], ["isLiveNow"], ["isLiveStream"], ["live"],
+            ["song", "isLive"], ["song", "isLiveContent"], ["song", "isLiveNow"], ["song", "isLiveStream"], ["song", "live"],
+            ["videoDetails", "isLive"], ["videoDetails", "isLiveContent"], ["videoDetails", "isLiveNow"],
+            ["playerResponse", "videoDetails", "isLive"], ["playerResponse", "videoDetails", "isLiveContent"], ["playerResponse", "videoDetails", "isLiveNow"],
+            ["playerResponse", "microformat", "playerMicroformatRenderer", "liveBroadcastDetails", "isLiveNow"],
+            ["isSeekableLive"], ["isDvrEnabled"], ["isLiveDVR"], ["canSeek"],
+            ["song", "isSeekableLive"], ["song", "isDvrEnabled"], ["song", "isLiveDVR"], ["song", "canSeek"],
+            ["videoDetails", "isLiveDvrEnabled"], ["videoDetails", "isLiveDVR"],
+            ["playerResponse", "videoDetails", "isLiveDvrEnabled"], ["playerResponse", "videoDetails", "isLiveDVR"]
+        ]
+
+        var parts: [String] = []
+        for keyPath in keysToProbe {
+            if let value = debugValue(at: keyPath, in: payload) {
+                parts.append("\(keyPath.joined(separator: "."))=\(value)")
+            }
+        }
+
+        let liveSummary = "parsed.isLive=\(String(describing: parsed.isLive)) parsed.isSeekableLive=\(String(describing: parsed.isSeekableLive))"
+        if parts.isEmpty {
+            let topLevelKeys = payload.keys.sorted().joined(separator: ",")
+            let songKeys = (payload["song"] as? [String: Any])?.keys.sorted().joined(separator: ",") ?? "none"
+            print("[YouTubeLiveDebug][\(prefix)] \(liveSummary) no live-related keys found topLevelKeys=[\(topLevelKeys)] songKeys=[\(songKeys)]")
+        } else {
+            print("[YouTubeLiveDebug][\(prefix)] \(liveSummary) fields: \(parts.joined(separator: " | "))")
+        }
+    }
+
+    private func debugValue(at keyPath: [String], in dict: [String: Any]) -> Any? {
+        guard !keyPath.isEmpty else { return nil }
+        var current: Any = dict
+        for key in keyPath {
+            guard let object = current as? [String: Any], let next = object[key] else {
+                return nil
+            }
+            current = next
+        }
+        return current
     }
 
     // MARK: - Like / Favourites
