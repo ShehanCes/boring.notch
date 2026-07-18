@@ -42,6 +42,7 @@ class MusicManager: ObservableObject {
     @Published var animations: BoringAnimations = .init()
     @Published var avgColor: NSColor = .white
     @Published var bundleIdentifier: String? = nil
+    @Published var audioCaptureBundleIdentifiers: [String] = []
     @Published var songDuration: TimeInterval = 0
     @Published var elapsedTime: TimeInterval = 0
     @Published var timestampDate: Date = .init()
@@ -332,6 +333,11 @@ class MusicManager: ObservableObject {
         if state.bundleIdentifier != self.bundleIdentifier {
             self.bundleIdentifier = state.bundleIdentifier
             updateControlCapabilities(for: state.bundleIdentifier)
+        }
+
+        let captureBundleIDs = state.effectiveAudioCaptureBundleIdentifiers
+        if captureBundleIDs != self.audioCaptureBundleIdentifiers {
+            self.audioCaptureBundleIdentifiers = captureBundleIDs
         }
 
         if repeatModeChanged {

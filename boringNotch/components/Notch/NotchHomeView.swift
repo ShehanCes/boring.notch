@@ -15,11 +15,22 @@ import SwiftUI
 struct MusicPlayerView: View {
     @EnvironmentObject var vm: BoringViewModel
     let albumArtNamespace: Namespace.ID
+    let horizontalMediaGestureFeedback: CGFloat
+    @Binding var isHoveringMusicArea: Bool
 
     var body: some View {
         HStack {
             AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace).frame(width: 120).padding(.all, 5 * (vm.notchSize.height / 190))
-            MusicControlsView().drawingGroup().compositingGroup()
+            MusicControlsView(horizontalMediaGestureFeedback: horizontalMediaGestureFeedback)
+                .drawingGroup()
+                .compositingGroup()
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isHoveringMusicArea = hovering
+        }
+        .onDisappear {
+            isHoveringMusicArea = false
         }
     }
 }
@@ -149,8 +160,9 @@ struct AlbumArtView: View {
 
 struct MusicControlsView: View {
     @ObservedObject var musicManager = MusicManager.shared
-        @EnvironmentObject var vm: BoringViewModel
-        @ObservedObject var webcamManager = WebcamManager.shared
+    @EnvironmentObject var vm: BoringViewModel
+    @ObservedObject var webcamManager = WebcamManager.shared
+    let horizontalMediaGestureFeedback: CGFloat
     @State private var sliderValue: Double = 0
     @State private var dragging: Bool = false
     @State private var lastDragged: Date = .distantPast
@@ -196,25 +208,34 @@ struct MusicControlsView: View {
                         let progressed = musicManager.elapsedTime + (delta * musicManager.playbackRate)
                         return min(max(progressed, 0), musicManager.songDuration)
                     }()
-                    let line: String = {
-                        if LyricsService.shared.isFetchingLyrics { return "Loading lyrics…" }
+                    let lyricDisplay: (line: String, displayDuration: Double?, animationID: Double?) = {
+                        if LyricsService.shared.isFetchingLyrics { return ("Loading lyrics…", nil, nil) }
                         if !LyricsService.shared.syncedLyrics.isEmpty {
-                            return LyricsService.shared.lyricLine(at: currentElapsed)
+                            let context = LyricsService.shared.lyricLineContext(at: currentElapsed)
+                            let displayDuration = context.endTime.map { max($0 - currentElapsed, 0) }
+                            return (context.text, displayDuration, context.startTime)
                         }
                         let trimmed = musicManager.currentLyrics.trimmingCharacters(in: .whitespacesAndNewlines)
-                        return trimmed.isEmpty ? "No lyrics found" : trimmed.replacingOccurrences(of: "\n", with: " ")
+                        let line = trimmed.isEmpty ? "No lyrics found" : trimmed.replacingOccurrences(of: "\n", with: " ")
+                        return (line, nil, nil)
                     }()
+                    let line = lyricDisplay.line
                     let isPersian = line.unicodeScalars.contains { scalar in
                         let v = scalar.value
                         return v >= 0x0600 && v <= 0x06FF
                     }
-                    MarqueeText(
+                    let lyricFont: Font = isPersian
+                        ? .custom("Vazirmatn-Regular", size: NSFont.preferredFont(forTextStyle: .subheadline).pointSize)
+                        : .subheadline
+                    TimedLyricText(
                         line,
-                        font: .subheadline,
+                        font: lyricFont,
+                        nsFont: .subheadline,
                         color: musicManager.isFetchingLyrics ? .gray.opacity(0.7) : .gray,
+                        displayDuration: lyricDisplay.displayDuration,
+                        animationID: lyricDisplay.animationID,
                         frameWidth: width
                     )
-                    .font(isPersian ? .custom("Vazirmatn-Regular", size: NSFont.preferredFont(forTextStyle: .subheadline).pointSize) : .subheadline)
                     .lineLimit(1)
                     .opacity(musicManager.isPlaying ? 1 : 0)
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -282,6 +303,8 @@ struct MusicControlsView: View {
             HoverButton(icon: "backward.fill", scale: .medium) {
                 MusicManager.shared.previousTrack()
             }
+            .scaleEffect(horizontalMediaGestureFeedback > 0 ? 1.12 : 1)
+            .animation(.interactiveSpring(response: 0.18, dampingFraction: 0.62), value: horizontalMediaGestureFeedback)
         case .playPause:
             HoverButton(icon: musicManager.isPlaying ? "pause.fill" : "play.fill", scale: .large) {
                 MusicManager.shared.togglePlay()
@@ -290,6 +313,8 @@ struct MusicControlsView: View {
             HoverButton(icon: "forward.fill", scale: .medium) {
                 MusicManager.shared.nextTrack()
             }
+            .scaleEffect(horizontalMediaGestureFeedback < 0 ? 1.12 : 1)
+            .animation(.interactiveSpring(response: 0.18, dampingFraction: 0.62), value: horizontalMediaGestureFeedback)
         case .repeatMode:
             HoverButton(icon: repeatIcon, iconColor: repeatIconColor, scale: .medium) {
                 MusicManager.shared.toggleRepeat()
@@ -443,15 +468,13 @@ struct NotchHomeView: View {
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     let albumArtNamespace: Namespace.ID
+    let horizontalMediaGestureFeedback: CGFloat
+    @Binding var isHoveringMusicArea: Bool
 
     var body: some View {
-        Group {
-            if !coordinator.firstLaunch {
-                mainContent
-            }
-        }
-        // simplified: use a straightforward opacity transition
-        .transition(.opacity)
+        mainContent
+            // simplified: use a straightforward opacity transition
+            .transition(.opacity)
     }
 
     private var shouldShowCamera: Bool {
@@ -460,7 +483,11 @@ struct NotchHomeView: View {
 
     private var mainContent: some View {
         HStack(alignment: .top, spacing: (shouldShowCamera && Defaults[.showCalendar]) ? 10 : 15) {
-            MusicPlayerView(albumArtNamespace: albumArtNamespace)
+            MusicPlayerView(
+                albumArtNamespace: albumArtNamespace,
+                horizontalMediaGestureFeedback: horizontalMediaGestureFeedback,
+                isHoveringMusicArea: $isHoveringMusicArea
+            )
 
             if Defaults[.showCalendar] {
                 CalendarView()
