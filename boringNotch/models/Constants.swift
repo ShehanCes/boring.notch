@@ -184,6 +184,26 @@ enum OptionKeyAction: String, CaseIterable, Identifiable, Defaults.Serializable 
     }
 }
 
+/// How the compact notch battery indicator reveals accessory (headphones/speaker) battery
+/// when a Bluetooth accessory is connected and "Show accessory battery" is enabled.
+enum HeadphoneBatteryDisplayMode: String, CaseIterable, Identifiable, Defaults.Serializable {
+    /// Keep Mac battery visible; briefly show accessory battery while the indicator is hovered.
+    case onHover
+    /// Automatically alternate between Mac and accessory battery on a timer.
+    case onTimer
+
+    var id: String { self.rawValue }
+
+    var displayName: String {
+        switch self {
+        case .onHover:
+            return String(localized: "On hover")
+        case .onTimer:
+            return String(localized: "On timer")
+        }
+    }
+}
+
 // Source/provider for OSD control (user-facing: "Source")
 enum OSDControlSource: String, CaseIterable, Identifiable, Defaults.Serializable {
     case builtin
@@ -282,6 +302,14 @@ extension Defaults.Keys {
     static let showBatteryIndicator = Key<Bool>("showBatteryIndicator", default: true)
     static let showBatteryPercentage = Key<Bool>("showBatteryPercentage", default: true)
     static let showPowerStatusIcons = Key<Bool>("showPowerStatusIcons", default: true)
+    static let showHeadphoneBattery = Key<Bool>("showHeadphoneBattery", default: true)
+    /// Whether accessory battery appears on hover or by timed alternation with Mac battery.
+    static let headphoneBatteryDisplayMode = Key<HeadphoneBatteryDisplayMode>(
+        "headphoneBatteryDisplayMode",
+        default: .onHover
+    )
+    /// How long (seconds) to show Mac vs accessory battery before swapping when mode is `.onTimer`.
+    static let headphoneBatterySwapInterval = Key<Double>("headphoneBatterySwapInterval", default: 3.0)
     
     // MARK: Downloads
     static let enableDownloadListener = Key<Bool>("enableDownloadListener", default: true)

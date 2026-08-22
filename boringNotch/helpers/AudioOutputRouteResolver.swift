@@ -32,13 +32,13 @@ final class AudioOutputRouteResolver {
 
         switch routeKind {
         case .airPods:
-            return "airpods"
+            return HeadphoneDeviceKind.airPods.symbolName
         case .airPodsPro:
-            return "airpodspro"
+            return HeadphoneDeviceKind.airPodsPro.symbolName
         case .airPodsMax:
-            return "airpodsmax"
+            return HeadphoneDeviceKind.airPodsMax.symbolName
         case .wiredHeadphones, .bluetoothHeadphones:
-            return "headphones"
+            return HeadphoneDeviceKind.genericHeadphones.symbolName
         case .builtInSpeaker, .externalSpeaker, .unknown:
             return speakerSymbol(for: clampedValue)
         }
@@ -113,23 +113,24 @@ final class AudioOutputRouteResolver {
         manufacturer _: String,
         transportType: UInt32?
     ) -> AudioOutputRouteKind {
-        let normalizedName = deviceName.lowercased()
-
-        if normalizedName.contains("airpods max") {
+        // First, check for an AirPods match by name — reuses the same name-based
+        // classification as the headphone battery feature so both features agree on
+        // what counts as "AirPods"/"AirPods Pro"/"AirPods Max".
+        switch classifyHeadphoneDeviceKind(named: deviceName) {
+        case .airPodsMax:
             return .airPodsMax
-        }
-        if normalizedName.contains("airpods pro") {
+        case .airPodsPro:
             return .airPodsPro
-        }
-        if normalizedName.contains("airpods") {
+        case .airPods:
             return .airPods
+        case .genericHeadphones, .bluetoothSpeaker:
+            break
         }
 
-        let isHeadphonesLike = normalizedName.contains("headphone")
-            || normalizedName.contains("headset")
-            || normalizedName.contains("earbud")
-            || normalizedName.contains("earphone")
-            || normalizedName.contains("pods")
+        // Not AirPods — fall back to transport type + name keywords to distinguish
+        // wired/Bluetooth headphones from built-in/external speakers.
+        let isHeadphonesLike = isHeadphoneLikeName(deviceName)
+        let normalizedName = deviceName.lowercased()
 
         switch transportType {
         case kAudioDeviceTransportTypeBuiltIn:

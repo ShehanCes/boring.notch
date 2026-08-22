@@ -437,6 +437,28 @@
         }
       }
     },
+    "10s" : {
+      "comment" : "Battery settings: maximum swap interval label",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10s"
+          }
+        }
+      }
+    },
+    "1s" : {
+      "comment" : "Battery settings: minimum swap interval label",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1s"
+          }
+        }
+      }
+    },
     "About" : {
       "localizations" : {
         "cs" : {
@@ -1555,6 +1577,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "容許存取"
+          }
+        }
+      }
+    },
+    "Alternates every %lld seconds" : {
+      "comment" : "Battery settings: summary of the accessory/Mac battery swap interval",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alternates every %lld seconds"
           }
         }
       }
@@ -3162,6 +3195,17 @@
         }
       }
     },
+    "Bluetooth Accessories" : {
+      "comment" : "Battery settings section header for Bluetooth accessory battery options",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bluetooth Accessories"
+          }
+        }
+      }
+    },
     "Boring Notch" : {
       "localizations" : {
         "cs" : {
@@ -3293,6 +3337,127 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Boring Notch 可以在后台检查更新。你也可以随时通过菜单栏手动检查。"
+          }
+        }
+      }
+    },
+    "Case" : {
+      "comment" : "Headphone battery popover: battery level of the AirPods charging case",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Case"
+          }
+        }
+      }
+    },
+    "Left" : {
+      "comment" : "Headphone battery popover: battery level of the left AirPod",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Left"
+          }
+        }
+      }
+    },
+    "Right" : {
+      "comment" : "Headphone battery popover: battery level of the right AirPod",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Right"
+          }
+        }
+      }
+    },
+    "Show accessory battery" : {
+      "comment" : "Battery settings: toggle to show battery for connected Bluetooth audio accessories",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show accessory battery"
+          }
+        }
+      }
+    },
+    "Shows accessory battery details in the battery popup when a Bluetooth headphone or speaker reports battery." : {
+      "comment" : "Battery settings footer when accessory battery is disabled",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows accessory battery details in the battery popup when a Bluetooth headphone or speaker reports battery."
+          }
+        }
+      }
+    },
+    "On hover" : {
+      "comment" : "Battery settings: reveal accessory battery by hovering the indicator",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On hover"
+          }
+        }
+      }
+    },
+    "On timer" : {
+      "comment" : "Battery settings: reveal accessory battery by timed Mac/accessory alternation",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On timer"
+          }
+        }
+      }
+    },
+    "Reveal accessory battery" : {
+      "comment" : "Battery settings: picker for how accessory battery is shown in the notch",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reveal accessory battery"
+          }
+        }
+      }
+    },
+    "Swap interval" : {
+      "comment" : "Battery settings: slider label for how often Mac and accessory battery alternate",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Swap interval"
+          }
+        }
+      }
+    },
+    "When a Bluetooth headphone or speaker reports battery, hover the battery indicator to peek at the accessory level. Details also appear in the battery popup." : {
+      "comment" : "Battery settings footer for on-hover accessory battery mode",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When a Bluetooth headphone or speaker reports battery, hover the battery indicator to peek at the accessory level. Details also appear in the battery popup."
+          }
+        }
+      }
+    },
+    "When a Bluetooth headphone or speaker reports battery, the notch indicator starts on the accessory, then smoothly alternates with the Mac battery. Details also appear in the battery popup." : {
+      "comment" : "Battery settings footer for on-timer accessory battery mode",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When a Bluetooth headphone or speaker reports battery, the notch indicator starts on the accessory, then smoothly alternates with the Mac battery. Details also appear in the battery popup."
           }
         }
       }
