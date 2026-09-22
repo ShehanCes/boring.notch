@@ -12,15 +12,36 @@ import SwiftUI
 
 // MARK: - Music Player Components
 
+final class SourceSwitchHaptics: ObservableObject {
+    @Published var tick: Bool = false
+
+    @MainActor
+    func play() {
+        guard Defaults[.enableHaptics] else { return }
+        tick.toggle()
+    }
+}
+
 struct MusicPlayerView: View {
     @EnvironmentObject var vm: BoringViewModel
+    @ObservedObject var musicManager = MusicManager.shared
     let albumArtNamespace: Namespace.ID
     let horizontalMediaGestureFeedback: CGFloat
     @Binding var isHoveringMusicArea: Bool
+    @State private var scrollMonitor: Any?
+    @State private var didSwitchSourceThisGesture = false
+    @State private var sourceSwipeCooldownTask: Task<Void, Never>?
+    @StateObject private var sourceHaptics = SourceSwitchHaptics()
+
+    private let mouseWheelSwitchCooldown: Duration = .milliseconds(90)
 
     var body: some View {
         HStack {
-            AlbumArtView(vm: vm, albumArtNamespace: albumArtNamespace).frame(width: 120).padding(.all, 5 * (vm.notchSize.height / 190))
+            AlbumArtView(
+                vm: vm,
+                albumArtNamespace: albumArtNamespace,
+                sourceHaptics: sourceHaptics
+            ).frame(width: 120).padding(.all, 5 * (vm.notchSize.height / 190))
             MusicControlsView(horizontalMediaGestureFeedback: horizontalMediaGestureFeedback)
                 .drawingGroup()
                 .compositingGroup()
@@ -29,9 +50,71 @@ struct MusicPlayerView: View {
         .onHover { hovering in
             isHoveringMusicArea = hovering
         }
+        .onAppear {
+            installScrollMonitor()
+        }
         .onDisappear {
             isHoveringMusicArea = false
+            removeScrollMonitor()
         }
+    }
+
+    /// Swipe/scroll down while hovering the player cycles sources. Swipe up is left
+    /// for the notch close gesture. One physical swipe (including momentum) = one switch.
+    private func installScrollMonitor() {
+        guard scrollMonitor == nil else { return }
+        let haptics = sourceHaptics
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            guard isHoveringMusicArea else { return event }
+            guard musicManager.shouldShowMediaSourceCarousel else { return event }
+
+            // Momentum after a swipe should not delay the next switch.
+            if !event.momentumPhase.isEmpty {
+                return event
+            }
+
+            if event.phase.contains(.ended) {
+                didSwitchSourceThisGesture = false
+                return event
+            }
+
+            let absDX = abs(event.scrollingDeltaX)
+            let absDY = abs(event.scrollingDeltaY)
+            guard absDY > absDX, absDY > 0.1 else { return event }
+
+            let deviceDirectionMultiplier: CGFloat = Defaults[.normalizeGestureDirection]
+                ? (event.isDirectionInvertedFromDevice ? 1 : -1)
+                : 1
+            let downDelta = event.scrollingDeltaY * deviceDirectionMultiplier
+            guard downDelta > 0 else { return event }
+            guard !didSwitchSourceThisGesture else { return event }
+
+            didSwitchSourceThisGesture = true
+            MusicManager.shared.selectNextMediaSource()
+            haptics.play()
+
+            // Mouse wheels report `.none` instead of a gesture phase.
+            if event.phase.isEmpty {
+                sourceSwipeCooldownTask?.cancel()
+                sourceSwipeCooldownTask = Task { @MainActor in
+                    try? await Task.sleep(for: mouseWheelSwitchCooldown)
+                    guard !Task.isCancelled else { return }
+                    didSwitchSourceThisGesture = false
+                }
+            }
+
+            return event
+        }
+    }
+
+    private func removeScrollMonitor() {
+        if let monitor = scrollMonitor {
+            NSEvent.removeMonitor(monitor)
+            scrollMonitor = nil
+        }
+        sourceSwipeCooldownTask?.cancel()
+        sourceSwipeCooldownTask = nil
+        didSwitchSourceThisGesture = false
     }
 }
 
@@ -39,6 +122,7 @@ struct AlbumArtView: View {
     @ObservedObject var musicManager = MusicManager.shared
     @ObservedObject var vm: BoringViewModel
     let albumArtNamespace: Namespace.ID
+    @ObservedObject var sourceHaptics: SourceSwitchHaptics
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -47,6 +131,7 @@ struct AlbumArtView: View {
             }
             albumArtButton
         }
+        .sensoryFeedback(.alignment, trigger: sourceHaptics.tick)
     }
 
     private var albumArtBackground: some View {
@@ -78,75 +163,66 @@ struct AlbumArtView: View {
             
             albumArtDarkOverlay
         }
-        .overlay(alignment: .bottom) {
+        .overlay(alignment: .bottomTrailing) {
             sourceCarouselOverlay
-                .padding(.horizontal, 8)
-                .offset(y: 12)
+                .padding(.trailing, 2)
+                .offset(y: 14)
+                .zIndex(10)
         }
     }
 
     @ViewBuilder
     private var sourceCarouselOverlay: some View {
         if vm.notchState == .open && musicManager.shouldShowMediaSourceCarousel {
-            HStack(spacing: 8) {
-                sourceNavButton(
-                    systemName: "chevron.left",
-                    action: {
-                        guard canNavigateToPreviousSource else { return }
-                        MusicManager.shared.selectMediaSource(at: musicManager.selectedSourceIndex - 1)
-                    },
-                    enabled: canNavigateToPreviousSource
-                )
+            HStack(spacing: 1) {
+                sourceNavButton(systemName: "chevron.left") {
+                    MusicManager.shared.selectPreviousMediaSource()
+                    playSourceSwitchHaptic()
+                }
 
-                HStack(spacing: 6) {
+                HStack(spacing: 3) {
                     ForEach(Array(musicManager.mediaSources.enumerated()), id: \.element.id) { index, source in
                         Circle()
                             .fill(index == musicManager.selectedSourceIndex ? Color.white : inactiveSourceDotColor(for: source))
                             .frame(width: 6, height: 6)
                             .shadow(color: .black.opacity(0.45), radius: 1, y: 1)
+                            .padding(.horizontal, 2)
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
                             .onTapGesture {
                                 MusicManager.shared.selectMediaSource(at: index)
+                                playSourceSwitchHaptic()
                             }
                     }
                 }
 
-                sourceNavButton(
-                    systemName: "chevron.right",
-                    action: {
-                        guard canNavigateToNextSource else { return }
-                        MusicManager.shared.selectMediaSource(at: musicManager.selectedSourceIndex + 1)
-                    },
-                    enabled: canNavigateToNextSource
-                )
+                sourceNavButton(systemName: "chevron.right") {
+                    MusicManager.shared.selectNextMediaSource()
+                    playSourceSwitchHaptic()
+                }
             }
+            .contentShape(Rectangle())
             .transition(.opacity.combined(with: .move(edge: .top)))
         }
     }
 
-    private var canNavigateToPreviousSource: Bool {
-        musicManager.selectedSourceIndex > 0
-    }
-
-    private var canNavigateToNextSource: Bool {
-        musicManager.selectedSourceIndex < musicManager.mediaSources.count - 1
+    private func playSourceSwitchHaptic() {
+        sourceHaptics.play()
     }
 
     private func inactiveSourceDotColor(for source: MediaSourceItem) -> Color {
         Color.gray.opacity(source.state.isPlaying ? 0.55 : 0.4)
     }
 
-    private var disabledSourceControlColor: Color {
-        Color.gray.opacity(0.4)
-    }
-
-    private func sourceNavButton(systemName: String, action: @escaping () -> Void, enabled: Bool) -> some View {
+    private func sourceNavButton(systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(enabled ? .white : disabledSourceControlColor)
+                .foregroundColor(.white)
                 .shadow(color: .black.opacity(0.5), radius: 1.5, y: 1)
+                .frame(width: 18, height: 22)
+                .contentShape(Rectangle())
         }
-        .disabled(!enabled)
         .buttonStyle(PlainButtonStyle())
     }
 
@@ -287,10 +363,15 @@ struct MusicControlsView: View {
                 elapsedTime: musicManager.elapsedTime,
                 playbackRate: musicManager.playbackRate,
                 isPlaying: musicManager.isPlaying,
-                isLiveStream: musicManager.isLiveStream
-            ) { newValue in
-                MusicManager.shared.seek(to: newValue)
-            }
+                isLiveStream: musicManager.isLiveStream,
+                isAtLiveEdge: musicManager.isAtLiveEdge,
+                onValueChange: { newValue in
+                    MusicManager.shared.seek(to: newValue)
+                },
+                onGoLive: {
+                    MusicManager.shared.goLive()
+                }
+            )
             .padding(.top, 5)
             .frame(height: 36)
         }
@@ -554,33 +635,46 @@ struct MusicSliderView: View {
     let playbackRate: Double
     let isPlaying: Bool
     let isLiveStream: Bool
+    let isAtLiveEdge: Bool
     var onValueChange: (Double) -> Void
+    var onGoLive: (() -> Void)? = nil
 
+    private var showLiveLabel: Bool {
+        isLiveStream && isAtLiveEdge
+    }
 
     var body: some View {
         VStack {
             CustomSlider(
                 value: $sliderValue,
-                range: 0...duration,
+                range: 0...max(duration, 0),
                 color: Defaults[.sliderColor] == SliderColorEnum.albumArt
                     ? Color(nsColor: color).ensureMinimumBrightness(factor: 0.8)
                     : Defaults[.sliderColor] == SliderColorEnum.accent ? .effectiveAccent : .white,
                 dragging: $dragging,
                 lastDragged: $lastDragged,
-                isEnabled: !isLiveStream,
+                isEnabled: !showLiveLabel,
                 onValueChange: onValueChange
             )
             .frame(height: 10, alignment: .center)
 
             HStack {
-                if isLiveStream {
+                if showLiveLabel {
                     Text("LIVE")
                         .foregroundColor(.red)
                 } else {
                     Text(timeString(from: sliderValue))
+                    if isLiveStream {
+                        Button("LIVE") {
+                            onGoLive?()
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.gray)
+                        .fontWeight(.semibold)
+                    }
                 }
                 Spacer()
-                if isLiveStream {
+                if showLiveLabel {
                     Text("--:--")
                 } else {
                     Text(timeString(from: duration))

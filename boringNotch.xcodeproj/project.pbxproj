@@ -40,6 +40,8 @@
 		1153BD9A2D98824300979FB0 /* SpotifyController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1153BD992D98824300979FB0 /* SpotifyController.swift */; };
 		1153BD9C2D98853B00979FB0 /* NowPlayingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1153BD9B2D98853B00979FB0 /* NowPlayingController.swift */; };
 		1153BDA72D99B22200979FB0 /* YouTubeMusicController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1153BDA62D99B22200979FB0 /* YouTubeMusicController.swift */; };
+		22YT00012F61000100YT0001 /* YouTubeTabPlayerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22YT00002F61000100YT0001 /* YouTubeTabPlayerBridge.swift */; };
+		22YT00032F61000100YT0001 /* YouTubeTabPlayerBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22YT00022F61000100YT0001 /* YouTubeTabPlayerBridgeTests.swift */; };
 		115C12EC2ED3D003009754CA /* OpenNotchOSD.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115C12EB2ED3D003009754CA /* OpenNotchOSD.swift */; };
 		1160F8D82DD98230006FBB94 /* NotchShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1160F8D72DD98230006FBB94 /* NotchShape.swift */; };
 		1163988D2DF5CAB40052E6AF /* EventModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1163988C2DF5CAB40052E6AF /* EventModel.swift */; };
@@ -234,6 +236,8 @@
 		1153BD972D9881F900979FB0 /* AppleScriptHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleScriptHelper.swift; sourceTree = "<group>"; };
 		1153BD992D98824300979FB0 /* SpotifyController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotifyController.swift; sourceTree = "<group>"; };
 		1153BD9B2D98853B00979FB0 /* NowPlayingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingController.swift; sourceTree = "<group>"; };
+		22YT00002F61000100YT0001 /* YouTubeTabPlayerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeTabPlayerBridge.swift; sourceTree = "<group>"; };
+		22YT00022F61000100YT0001 /* YouTubeTabPlayerBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeTabPlayerBridgeTests.swift; sourceTree = "<group>"; };
 		1153BDA62D99B22200979FB0 /* YouTubeMusicController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouTubeMusicController.swift; sourceTree = "<group>"; };
 		115C12EB2ED3D003009754CA /* OpenNotchOSD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenNotchOSD.swift; sourceTree = "<group>"; };
 		1160F8D72DD98230006FBB94 /* NotchShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchShape.swift; sourceTree = "<group>"; };
@@ -482,6 +486,7 @@
 				1153BD922D986E4300979FB0 /* AppleMusicController.swift */,
 				1153BD992D98824300979FB0 /* SpotifyController.swift */,
 				1153BD9B2D98853B00979FB0 /* NowPlayingController.swift */,
+				22YT00002F61000100YT0001 /* YouTubeTabPlayerBridge.swift */,
 			);
 			path = MediaControllers;
 			sourceTree = "<group>";
@@ -682,6 +687,7 @@
 			children = (
 				22AA000F2F60000100AA0001 /* MusicManagerCommandRoutingTests.swift */,
 				22AA00012F60000100AA0001 /* MusicManagerSourceRoutingTests.swift */,
+				22YT00022F61000100YT0001 /* YouTubeTabPlayerBridgeTests.swift */,
 			);
 			path = boringNotchTests;
 			sourceTree = "<group>";
@@ -1057,6 +1063,7 @@
 			files = (
 				22AA000E2F60000100AA0001 /* MusicManagerCommandRoutingTests.swift in Sources */,
 				22AA00022F60000100AA0001 /* MusicManagerSourceRoutingTests.swift in Sources */,
+				22YT00032F61000100YT0001 /* YouTubeTabPlayerBridgeTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1084,6 +1091,7 @@
 				14D570CB2C5F4B2C0011E668 /* BatteryStatusViewModel.swift in Sources */,
 				9A0887322C7A693000C160EA /* TabButton.swift in Sources */,
 				1153BD9C2D98853B00979FB0 /* NowPlayingController.swift in Sources */,
+				22YT00012F61000100YT0001 /* YouTubeTabPlayerBridge.swift in Sources */,
 				11985BEF2F37E48900F81585 /* OSDIconView.swift in Sources */,
 				1194E9402EACC652009C82D6 /* Color+AccentColor.swift in Sources */,
 				B141C2412CA5F53F00AC8CC8 /* SparkleView.swift in Sources */,
@@ -1425,7 +1433,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSBackgroundOnly = NO;
 				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "This app uses AppleEvents to control music";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "boring.notch reads the YouTube tab in Chrome, Brave, or Safari so live video progress and seeking match the player. Nothing is sent off your Mac.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "This app uses the calendar to display your calendar events";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app uses the camera to display a live camera view";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -1491,7 +1499,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSBackgroundOnly = NO;
 				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSAppleEventsUsageDescription = "This app uses AppleEvents to control music";
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "boring.notch reads the YouTube tab in Chrome, Brave, or Safari so live video progress and seeking match the player. Nothing is sent off your Mac.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "This app uses the calendar to display your calendar events";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app uses the camera to display a live camera view";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";

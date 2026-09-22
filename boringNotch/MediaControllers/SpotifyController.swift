@@ -23,6 +23,10 @@ class SpotifyController: MediaControllerProtocol {
         $playbackState.eraseToAnyPublisher()
     }
 
+    var commandTargetBundleIdentifier: String {
+        playbackState.bundleIdentifier
+    }
+
     var supportsVolumeControl: Bool {
         return true
     }

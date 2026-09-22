@@ -13,6 +13,8 @@ protocol MediaControllerProtocol: ObservableObject {
     var playbackStatePublisher: AnyPublisher<PlaybackState, Never> { get }
     var supportsVolumeControl: Bool { get }
     var supportsFavorite: Bool { get }
+    /// Bundle ID MediaRemote / transport commands from this controller currently target.
+    var commandTargetBundleIdentifier: String { get }
     
     func setFavorite(_ favorite: Bool) async
     func play() async

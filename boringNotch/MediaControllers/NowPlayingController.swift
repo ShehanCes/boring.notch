@@ -23,6 +23,10 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         $playbackState.eraseToAnyPublisher()
     }
 
+    var commandTargetBundleIdentifier: String {
+        playbackState.bundleIdentifier
+    }
+
     var supportsVolumeControl: Bool {
         let bundleID = playbackState.bundleIdentifier
         return bundleID == "com.apple.Music" || bundleID == "com.spotify.client"
@@ -253,15 +257,22 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
             sourceBundleIdentifier: payload.bundleIdentifier,
             fallbackBundleIdentifiers: captureBundleFallbackIdentifiers
         )
-        
-        newPlaybackState.title = payload.title ?? (diff ? self.playbackState.title : "")
-        newPlaybackState.artist = payload.artist ?? (diff ? self.playbackState.artist : "")
-        newPlaybackState.album = payload.album ?? (diff ? self.playbackState.album : "")
-        newPlaybackState.duration = payload.duration ?? (diff ? self.playbackState.duration : 0)
+        // MediaRemote diffs omit fields. Never reuse title/art/etc. from a different app
+        // (YouTube Music cover on a Chrome YouTube live is the typical failure).
+        let reusePrevious = NowPlayingDiffReuse.allowsCarryover(
+            diff: diff,
+            previousBundle: self.playbackState.bundleIdentifier,
+            newBundle: resolvedBundleIdentifier
+        )
+
+        newPlaybackState.title = payload.title ?? (reusePrevious ? self.playbackState.title : "")
+        newPlaybackState.artist = payload.artist ?? (reusePrevious ? self.playbackState.artist : "")
+        newPlaybackState.album = payload.album ?? (reusePrevious ? self.playbackState.album : "")
+        newPlaybackState.duration = payload.duration ?? (reusePrevious ? self.playbackState.duration : 0)
         
         if let elapsedTime = payload.elapsedTime {
             newPlaybackState.currentTime = elapsedTime
-        } else if diff {
+        } else if reusePrevious {
             if payload.playing == true {
                 let timeSinceLastUpdate = Date().timeIntervalSince(self.playbackState.lastUpdated)
                 newPlaybackState.currentTime = self.playbackState.currentTime + (self.playbackState.playbackRate * timeSinceLastUpdate)
@@ -275,47 +286,55 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         
         if let shuffleMode = payload.shuffleMode {
             newPlaybackState.isShuffled = shuffleMode != 1
-        } else if !diff {
-            newPlaybackState.isShuffled = false
-        } else {
+        } else if reusePrevious {
             newPlaybackState.isShuffled = self.playbackState.isShuffled
+        } else {
+            newPlaybackState.isShuffled = false
         }
         if let repeatModeValue = payload.repeatMode {
             newPlaybackState.repeatMode = RepeatMode(rawValue: repeatModeValue) ?? .off
-        } else if !diff {
-            newPlaybackState.repeatMode = .off
-        } else {
+        } else if reusePrevious {
             newPlaybackState.repeatMode = self.playbackState.repeatMode
+        } else {
+            newPlaybackState.repeatMode = .off
         }
 
         if let artworkDataString = payload.artworkData {
             newPlaybackState.artwork = Data(
                 base64Encoded: artworkDataString.trimmingCharacters(in: .whitespacesAndNewlines)
             )
-        } else if !diff {
-            newPlaybackState.artwork = nil
-        } else {
+        } else if reusePrevious {
             newPlaybackState.artwork = self.playbackState.artwork
+        } else {
+            newPlaybackState.artwork = nil
         }
 
         if let dateString = payload.timestamp,
            let date = ISO8601DateFormatter().date(from: dateString) {
             newPlaybackState.lastUpdated = date
-        } else if !diff {
-            newPlaybackState.lastUpdated = Date()
-        } else {
+        } else if reusePrevious {
             newPlaybackState.lastUpdated = self.playbackState.lastUpdated
+        } else {
+            newPlaybackState.lastUpdated = Date()
         }
 
-        newPlaybackState.playbackRate = payload.playbackRate ?? (diff ? self.playbackState.playbackRate : 1.0)
-        newPlaybackState.isPlaying = payload.playing ?? (diff ? self.playbackState.isPlaying : false)
+        newPlaybackState.playbackRate = payload.playbackRate ?? (reusePrevious ? self.playbackState.playbackRate : 1.0)
+        newPlaybackState.isPlaying = payload.playing ?? (reusePrevious ? self.playbackState.isPlaying : false)
         newPlaybackState.bundleIdentifier = resolvedBundleIdentifier
         newPlaybackState.audioCaptureBundleIdentifiers = captureBundleIdentifiers
         
-        newPlaybackState.volume = payload.volume ?? (diff ? self.playbackState.volume : 0.5)
+        newPlaybackState.volume = payload.volume ?? (reusePrevious ? self.playbackState.volume : 0.5)
+        if let canSeek = payload.canSeek {
+            newPlaybackState.canSeek = canSeek
+        } else if reusePrevious {
+            newPlaybackState.canSeek = self.playbackState.canSeek
+        } else {
+            newPlaybackState.canSeek = nil
+        }
+
         if let isLive = payload.resolvedIsLive {
             newPlaybackState.isLive = isLive
-        } else if diff {
+        } else if reusePrevious {
             newPlaybackState.isLive = self.playbackState.isLive
         } else {
             newPlaybackState.isLive = false
@@ -364,6 +383,12 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
          }
      }
     
+}
+
+enum NowPlayingDiffReuse {
+    static func allowsCarryover(diff: Bool, previousBundle: String, newBundle: String) -> Bool {
+        diff && !previousBundle.isEmpty && previousBundle == newBundle
+    }
 }
 
 private extension NowPlayingController {
@@ -477,9 +502,12 @@ struct NowPlayingPayload: Codable {
     var resolvedIsLive: Bool? {
         if let value = isLive { return value }
         if let value = isLiveStream { return value }
-        if let value = isLiveContent { return value }
         if let value = isLiveNow { return value }
         if let type = streamType?.lowercased(), type == "live" {
+            return true
+        }
+        // Do not use isLiveContent: YouTube sets it for premieres and former lives, not "now live".
+        if isSeekableLive == true || isDvrEnabled == true {
             return true
         }
         return nil

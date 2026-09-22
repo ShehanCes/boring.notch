@@ -29,6 +29,8 @@ struct PlaybackState {
     var artwork: Data?
     var volume: Double = 0.5
     var isLive: Bool = false
+    /// `nil` when the source does not report seekability (common for browser Media Session).
+    var canSeek: Bool? = nil
     var isFavorite: Bool = false
 
     var effectiveAudioCaptureBundleIdentifiers: [String] {
@@ -62,6 +64,7 @@ extension PlaybackState: Equatable {
             && lhs.repeatMode == rhs.repeatMode
             && lhs.artwork == rhs.artwork
             && lhs.isLive == rhs.isLive
+            && lhs.canSeek == rhs.canSeek
             && lhs.isFavorite == rhs.isFavorite
     }
 }
